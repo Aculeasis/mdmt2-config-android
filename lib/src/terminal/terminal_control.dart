@@ -1,0 +1,250 @@
+import 'dart:async';
+
+import 'package:mdmt2_config/src/terminal/instances_controller.dart';
+import 'package:mdmt2_config/src/terminal/log.dart';
+import 'package:mdmt2_config/src/terminal/terminal_client.dart';
+
+class BackupLine {
+  final String filename;
+  final DateTime time;
+  BackupLine(this.filename, this.time);
+}
+
+enum _ReconnectStage { no, maybe, really }
+
+class TerminalControl extends TerminalClient {
+  static const musicStateMap = {
+    'pause': MusicStatus.pause,
+    'play': MusicStatus.play,
+    'stop': MusicStatus.stop,
+    'disabled': MusicStatus.nope,
+  };
+  static const allowValueCMD = {'tts', 'ask', 'rec', 'listener', 'volume', 'mvolume', 'backup.restore'};
+  static const allowEmptyCMD = {
+    'voice',
+    'maintenance.reload',
+    'maintenance.stop',
+    'pause',
+    'backup.manual',
+    'backup.list'
+  };
+
+  final subscribeTo = [
+    'backup',
+    'listener',
+    'volume',
+    'music_volume',
+    'music_status',
+  ];
+
+  final _seeInToads = StreamController<String>.broadcast();
+  final _sendBackupList = StreamController<List<BackupLine>>.broadcast();
+  final _externalStreamCMD = StreamController<InternalCommand>.broadcast();
+  final InstanceViewState view;
+  final Reconnect reconnect;
+  _ReconnectStage _reconnectStage = _ReconnectStage.no;
+
+  TerminalControl(server, _stopNotifyStream, log, this.view, this.reconnect)
+      : super(server, WorkingMode.controller, _stopNotifyStream, log: log, name: 'Controller') {
+    subscribeTo.addAll(view.buttons.keys);
+    _externalStreamCMD.stream.listen((event) => _externalCMD(event.cmd.toLowerCase(), event.data));
+    _addHandlers();
+  }
+
+  Stream<String> get streamToads => _seeInToads.stream;
+  Stream<List<BackupLine>> get streamBackupList => _sendBackupList.stream;
+
+  // Для внешних вызовов
+  executeMe(String cmd, {dynamic data}) => _externalStreamCMD.add(InternalCommand(cmd, data));
+
+  @override
+  void dispose() {
+    _sendBackupList.close();
+    _seeInToads.close();
+    _externalStreamCMD.close();
+    super.dispose();
+  }
+
+  @override
+  onLogger(dynamic msg) => sendSelfClose(error: 'FIXME onLogger');
+  @override
+  onClose(error, type) {
+    if (error == null && _reconnectStage == _ReconnectStage.really && type == WorkSignalsType.selfClose)
+      reconnect.activate();
+    _reconnectStage = _ReconnectStage.no;
+  }
+
+  @override
+  onOk() {
+    _reconnectStage = _ReconnectStage.no;
+    view.reset();
+    callJRPC('get',
+        params: ['listener', 'volume', 'mvolume', 'mstate'],
+        handler: AsyncResponseHandler((_, response) {
+          final listener = _getFromMap<bool>('listener', response);
+          view.listener.value = listener ?? view.listener.value;
+
+          view.volume.value = _volumeSanitize(_getFromMap<int>('volume', response));
+          view.musicVolume.value = _volumeSanitize(_getFromMap<int>('mvolume', response));
+          view.musicStatus.value = _mStateSanitize(_getFromMap<String>('mstate', response));
+        }, null));
+
+    callJRPC('subscribe',
+        params: subscribeTo,
+        handler: AsyncResponseHandler((_, response) {
+          bool state;
+          try {
+            state = response.result.value;
+          } catch (e) {
+            pPrint('Wrong subscribe result: $e');
+          }
+          if (state) {
+            for (String cmd in subscribeTo) addRequestHandler('notify.$cmd', _handleNotify);
+          }
+        }, null));
+  }
+
+  void _callToast(String msg) {
+    if (_seeInToads.hasListener) _seeInToads.add(msg);
+  }
+
+  void _externalCMD(String cmd, dynamic data) {
+    bool wrongData() => data == null || (data is String && data == '');
+    dynamic params;
+    if (cmd == 'ping') {
+      params = {'time': DateTime.now().microsecondsSinceEpoch};
+    } else if (cmd == 'play') {
+      if (!wrongData()) params = ['$data'];
+    } else if (allowValueCMD.contains(cmd)) {
+      if (wrongData())
+        return _callToast('What did you want?');
+      else
+        params = ['$data'];
+    } else if (!allowEmptyCMD.contains(cmd)) {
+      return _callToast('Unknown command: "$cmd"');
+    }
+    if (stage == ConnectStage.controller) callJRPC(cmd, params: params);
+  }
+
+  _addHandlers() {
+    void _error(String method, Error error) => _callToast('"$method" error: $error');
+    addResponseHandler('ping', handler: (_, response) {
+      int time = DateTime.now().microsecondsSinceEpoch;
+      try {
+        time = time - response.result.value['time'];
+      } catch (e) {
+        final msg = 'Ping parsing error: $e';
+        pPrint(msg);
+        _callToast(msg);
+        return;
+      }
+      _callToast('Ping ${(time / 1000).toStringAsFixed(2)} ms');
+    }, errorHandler: _error);
+    addResponseHandler('rec', errorHandler: _error);
+    addResponseHandler('backup.list',
+        handler: (_, response) {
+          final files = <BackupLine>[];
+          try {
+            for (Map<String, dynamic> file in response.result.value) {
+              final String filename = file['filename'];
+              final double timestamp = file['timestamp'];
+              if (filename == null || filename == '') throw 'Empty filename in $file';
+              if (timestamp == null) throw 'Empty timestamp in $file';
+              files.add(BackupLine(filename, LogLine.timeToDateTime(timestamp)));
+            }
+          } catch (e) {
+            final msg = 'backup.list parsing error: $e';
+            _sendBackupList.addError(msg);
+            pPrint(msg);
+            return;
+          }
+          files.sort((a, b) => b.time.microsecondsSinceEpoch - a.time.microsecondsSinceEpoch);
+          if (files.isEmpty) {
+            _sendBackupList.addError('No backups');
+          } else {
+            _sendBackupList.add(files);
+          }
+        },
+        errorHandler: (_, error) => _sendBackupList.addError('backup.list error: $error'));
+    addResponseHandler('backup.restore', handler: (_, response) {
+      _reconnectStage = _ReconnectStage.maybe;
+      final filename = _getFromMap<String>('filename', response) ?? '.. ambiguous result';
+      _callToast('Restoring started from $filename');
+    }, errorHandler: _error);
+    addResponseHandler('maintenance.reload', handler: (_, __) => _reconnectStage = _ReconnectStage.maybe);
+  }
+
+  _handleNotify(Request request) {
+    final list = request.method.split('.')..removeAt(0);
+    final method = list.join('.');
+    if (request.id != null) {
+      pPrint('Wrong notification: $request');
+      return;
+    }
+    if (view.buttons.containsKey(method)) {
+      final value = _getFirstArg<bool>(request);
+      if (value != null) {
+        if (method == 'terminal_stop' && _reconnectStage == _ReconnectStage.maybe)
+          _reconnectStage = _ReconnectStage.really;
+        view.buttons[method].value = value;
+      }
+
+      return;
+    }
+    switch (method) {
+      case 'backup':
+        final value = (_getFirstArg<String>(request) ?? 'error').toUpperCase();
+        _callToast('Backup: $value');
+        break;
+      case 'listener':
+        view.listener.value = _getFirstArg<bool>(request) ?? view.listener.value;
+        break;
+      case 'volume':
+        view.volume.value = _volumeSanitize(_getFirstArg<int>(request));
+        break;
+      case 'music_volume':
+        view.musicVolume.value = _volumeSanitize(_getFirstArg<int>(request));
+        break;
+      case 'music_status':
+        view.musicStatus.value = _mStateSanitize(_getFirstArg<String>(request));
+        break;
+      default:
+        pPrint('Unknown notification $method: $request');
+        break;
+    }
+  }
+
+  int _volumeSanitize(int volume) {
+    if (volume == null) return -1;
+    if (volume < 0)
+      volume = -1;
+    else if (volume > 100) volume = 100;
+    return volume;
+  }
+
+  MusicStatus _mStateSanitize(String mState) => musicStateMap[mState] ?? MusicStatus.error;
+
+  T _getFromMap<T>(String key, Response response) {
+    T result;
+    dynamic error;
+    try {
+      result = response.result.value[key];
+    } catch (e) {
+      error = e;
+    }
+    if (result == null) pPrint('Error parsing $response: $error');
+    return result;
+  }
+
+  T _getFirstArg<T>(Request request) {
+    T result;
+    dynamic error;
+    try {
+      result = request.params['args'][0];
+    } catch (e) {
+      error = e;
+    }
+    if (result == null) pPrint('Error parsing $request: $error');
+    return result;
+  }
+}

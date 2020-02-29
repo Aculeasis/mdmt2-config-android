@@ -1,0 +1,499 @@
+import 'dart:async';
+
+import 'package:flutter/material.dart';
+import 'package:mdmt2_config/src/dialogs.dart';
+import 'package:mdmt2_config/src/screens/running_server/backup_list.dart';
+import 'package:mdmt2_config/src/terminal/instances_controller.dart';
+import 'package:mdmt2_config/src/terminal/terminal_client.dart';
+import 'package:mdmt2_config/src/terminal/terminal_control.dart';
+import 'package:mdmt2_config/src/utils.dart';
+import 'package:mdmt2_config/src/widgets.dart';
+
+class ControllerView extends StatefulWidget {
+  final TerminalControl control;
+  final InstanceViewState view;
+
+  ControllerView(this.control, this.view, {Key key}) : super(key: key);
+
+  @override
+  _ControllerViewState createState() => _ControllerViewState();
+}
+
+class _ControllerViewState extends State<ControllerView> {
+  final _subscriptions = <String, StreamSubscription<void>>{};
+  bool _isConnected;
+
+  @override
+  void dispose() {
+    for (var subscription in _subscriptions.values) subscription.cancel();
+    _subscriptions.clear();
+    super.dispose();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _isConnected = widget.control.getStage == ConnectStage.controller;
+    _subscriptions['toads'] = widget.control.streamToads.listen((event) => seeOkToast(context, event));
+    _subscriptions['connected'] = widget.control.workerNotifyListen((event) {
+      final isConnected = widget.control.getStage == ConnectStage.controller;
+      debugPrint(' isConnected=$isConnected');
+      if (isConnected != _isConnected) {
+        setState(() => _isConnected = isConnected);
+      }
+    });
+  }
+
+  _openBackupListPage(BuildContext context) {
+    _subscriptions.remove('toads')?.cancel();
+    Navigator.of(context)
+        .push(MaterialPageRoute(builder: (context) => BackupSelectsPage(widget.control, widget.view)))
+        .then(
+            (_) => _subscriptions['toads'] = widget.control.streamToads.listen((event) => seeOkToast(context, event)));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder(
+      valueListenable: widget.control.reconnect.isActive,
+      builder: (context, restarting, child) {
+        if (!_isConnected && restarting)
+          return Stack(
+            fit: StackFit.expand,
+            children: <Widget>[
+              child,
+              Align(
+                alignment: Alignment.center,
+                child: CircularProgressIndicator(),
+              )
+            ],
+          );
+        return child;
+      },
+      child: _main(context),
+    );
+  }
+
+  Widget _main(BuildContext context) {
+    return SingleChildScrollView(
+      child: SafeArea(
+          child: Container(
+        margin: EdgeInsets.fromLTRB(5, 5, 5, 15),
+        child: Column(
+          children: <Widget>[
+            divider('Status'),
+            terminalStatusLine(),
+            divider('Creating models'),
+            Padding(
+              padding: EdgeInsets.symmetric(horizontal: 8),
+              child: creatingModels2Line(context),
+            ),
+            divider('TTS/ASK/VOICE'),
+            fieldForTAVLine(widget.view, (cmd, msg) => widget.control.executeMe(cmd, data: msg), _isConnected),
+            divider('Music'),
+            musicLine(),
+            divider('Maintenance'),
+            maintenance2Line(),
+          ],
+        ),
+      )),
+    );
+  }
+
+  Widget maintenance2Line() {
+    return Table(
+      columnWidths: {for (int i = 1; i < 6; i += 2) i: FractionColumnWidth(0.02)},
+      defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+      children: [maintenanceLine1(), maintenanceLine2()],
+    );
+  }
+
+  TableRow maintenanceLine1() {
+    return TableRow(children: [
+      RaisedButton(
+        padding: EdgeInsets.all(2),
+        onPressed: _isConnected ? () => widget.control.executeMe('ping') : null,
+        child: Text('Ping'),
+      ),
+      SizedBox(),
+      ValueListenableBuilder(
+          valueListenable: widget.view.buttons['terminal_stop'],
+          builder: (_, busy, __) => RaisedButton(
+                padding: EdgeInsets.all(2),
+                onPressed: _isConnected && !busy
+                    ? () => dialogYesNo(context, 'Reload server?', '', 'Reload', 'Cancel').then((value) {
+                          if (value) widget.control.executeMe('maintenance.reload');
+                        })
+                    : null,
+                child: Text('Reload'),
+              )),
+      SizedBox(),
+      ValueListenableBuilder(
+          valueListenable: widget.view.buttons['terminal_stop'],
+          builder: (_, busy, __) => RaisedButton(
+                padding: EdgeInsets.all(2),
+                onPressed: _isConnected && !busy
+                    ? () => dialogYesNo(context, 'Stop server?', '', 'Stop', 'Cancel').then((value) {
+                          if (value) widget.control.executeMe('maintenance.stop');
+                        })
+                    : null,
+                child: Text('Stop'),
+              )),
+      SizedBox(),
+      ValueListenableBuilder(
+          valueListenable: widget.view.listener,
+          builder: (_, isOn, __) {
+            final onOff = isOn ? 'OFF' : 'ON';
+            return RaisedButton(
+              padding: EdgeInsets.all(2),
+              onPressed: _isConnected ? () => widget.control.executeMe('listener', data: onOff.toLowerCase()) : null,
+              child: Text('Listen $onOff'),
+            );
+          }),
+    ]);
+  }
+
+  TableRow maintenanceLine2() {
+    return TableRow(children: [
+      ValueListenableBuilder(
+          valueListenable: widget.view.buttons['manual_backup'],
+          builder: (_, busy, __) => RaisedButton(
+                padding: EdgeInsets.all(2),
+                onPressed: _isConnected && !busy ? () => widget.control.executeMe('backup.manual') : null,
+                child: Text('Backup'),
+              )),
+      SizedBox(),
+      ValueListenableBuilder(
+          valueListenable: widget.view.buttons['terminal_stop'],
+          builder: (context, busy, __) => RaisedButton(
+                padding: EdgeInsets.all(2),
+                onPressed: _isConnected && !busy ? () => _openBackupListPage(context) : null,
+                child: Text('Restore*'),
+              )),
+      SizedBox(),
+      SizedBox(), //
+      SizedBox(),
+      SizedBox(), //
+    ]);
+  }
+
+  Widget terminalStatusLine() {
+    return Row(
+      children: <Widget>[
+        Text('Volume:'),
+        VolumeSlider(
+          widget.view.volume,
+          (newVal) => widget.control.executeMe('volume', data: newVal),
+          enabled: _isConnected,
+        ),
+        talkStatus(),
+        recordStatus()
+      ],
+    );
+  }
+
+  Widget talkStatus() {
+    return ValueListenableBuilder(
+        valueListenable: widget.view.buttons['talking'],
+        builder: (_, value, __) {
+          value &= _isConnected;
+          return SizedBox(
+            width: 26.0,
+            height: 26.0,
+            child: IconButton(
+              onPressed: value ? () {} : null,
+              padding: EdgeInsets.zero,
+              icon: Icon(value ? Icons.volume_up : Icons.volume_off),
+            ),
+          );
+        });
+  }
+
+  Widget recordStatus() {
+    return ValueListenableBuilder(
+        valueListenable: widget.view.buttons['record'],
+        builder: (_, value, __) {
+          value &= _isConnected;
+          return SizedBox(
+            width: 26.0,
+            height: 26.0,
+            child: IconButton(
+              onPressed: value ? () {} : null,
+              padding: EdgeInsets.zero,
+              icon: Icon(value ? Icons.mic : Icons.mic_off),
+            ),
+          );
+        });
+  }
+
+  Widget musicLine() {
+    return ValueListenableBuilder<MusicStatus>(
+        valueListenable: widget.view.musicStatus,
+        builder: (_, status, __) {
+          final enable = _isConnected && status != MusicStatus.error && status != MusicStatus.nope;
+          String label;
+          IconData icon;
+          String cmd = 'pause';
+          if (status == MusicStatus.play) {
+            label = 'Puase';
+            icon = Icons.pause;
+          } else if (status == MusicStatus.pause) {
+            label = 'Play';
+            icon = Icons.play_arrow;
+          } else if (status == MusicStatus.stop) {
+            label = 'Replay';
+            icon = Icons.replay;
+            cmd = 'play';
+          } else {
+            icon = Icons.error;
+            label = status.toString().split('.').last;
+            label = label[0].toUpperCase() + label.substring(1);
+          }
+          return Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: <Widget>[
+              RaisedButton.icon(
+                  //elevation: 1,
+                  onPressed: enable ? () => widget.control.executeMe(cmd) : null,
+                  icon: Icon(icon),
+                  label: Text(label)),
+              VolumeSlider(
+                widget.view.musicVolume,
+                (newVal) => widget.control.executeMe('mvolume', data: newVal),
+                enabled: enable,
+              ),
+              SizedBox(
+                width: 30,
+                height: 30,
+                child: RaisedButton(
+                    onPressed: enable
+                        ? () {
+                            uriDialog(context, widget.view.musicURI).then((value) {
+                              if (value == null) return;
+                              widget.view.musicURI = value;
+                              if (_isConnected) widget.control.executeMe('play', data: value);
+                            });
+                          }
+                        : null,
+                    child: Icon(Icons.replay),
+                    padding: EdgeInsets.zero),
+              )
+            ],
+          );
+        });
+  }
+
+  Widget creatingModels2Line(BuildContext context) {
+    return Table(
+      columnWidths: {
+        0: FractionColumnWidth(.18),
+        2: FractionColumnWidth(.015),
+        4: FractionColumnWidth(.16),
+        5: FractionColumnWidth(0.08)
+      },
+      defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+      children: [makeModelLine(context), makeSampleLine()],
+    );
+  }
+
+  TableRow makeModelLine(BuildContext context) {
+    return TableRow(children: [
+      Text('Model:'),
+      ValueListenableBuilder(
+          valueListenable: widget.view.buttons['model_compile'],
+          builder: (_, busy, __) => RaisedButton(
+              child: Text('Compile'),
+              onPressed: _isConnected && !busy
+                  ? () => widget.control.executeMe('rec', data: 'compile_${widget.view.modelIndex.value}_0')
+                  : null)),
+      SizedBox(),
+      RaisedButton(
+          child: Text('Remove'),
+          onPressed: _isConnected
+              ? () => dialogYesNo(context, 'Remove model #${widget.view.modelIndex.value}?', '', 'Remove', 'Cancel')
+                      .then((value) {
+                    if (value) widget.control.executeMe('rec', data: 'del_${widget.view.modelIndex.value}_0');
+                  })
+              : null),
+      SizedBox(),
+      dropdownButtonInt(widget.view.modelIndex, 6)
+    ]);
+  }
+
+  TableRow makeSampleLine() {
+    String target() => '${widget.view.modelIndex.value}_${widget.view.sampleIndex.value}';
+    return TableRow(children: [
+      Text('Sample:'),
+      ValueListenableBuilder(
+          valueListenable: widget.view.buttons['sample_record'],
+          builder: (_, busy, __) => RaisedButton(
+              child: Text('Record'),
+              onPressed:
+                  _isConnected && !busy ? () => widget.control.executeMe('rec', data: 'rec_${target()}') : null)),
+      SizedBox(),
+      RaisedButton(
+          child: Text('Play'),
+          onPressed: _isConnected ? () => widget.control.executeMe('rec', data: 'play_${target()}') : null),
+      SizedBox(),
+      dropdownButtonInt(widget.view.sampleIndex, 3),
+    ]);
+  }
+}
+
+class VolumeSlider extends StatefulWidget {
+  final ValueNotifier<int> position;
+  final void Function(int) onChange;
+  final bool enabled;
+
+  VolumeSlider(this.position, this.onChange, {this.enabled = false, Key key}) : super(key: key);
+
+  @override
+  _VolumeSliderState createState() => _VolumeSliderState();
+}
+
+class _VolumeSliderState extends State<VolumeSlider> {
+  // Отправляем с задержкой т.е. слайдер глючный и может выдать изменение сразу после начала использования
+  static const throttleToSend = Duration(milliseconds: 200);
+  Timer toSendTimer;
+  double position;
+
+  @override
+  void initState() {
+    super.initState();
+    _rebuild();
+    widget.position.addListener(_rebuild);
+  }
+
+  @override
+  void dispose() {
+    toSendTimer?.cancel();
+    widget.position.removeListener(_rebuild);
+    super.dispose();
+  }
+
+  void _rebuild() {
+    setState(() {
+      position = widget.position.value.toDouble();
+      if (position < 0)
+        position = 0;
+      else if (position > 100) position = 100;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = widget.enabled && widget.position.value >= 0 && widget.position.value <= 100;
+    return Slider(
+      value: position,
+      onChanged: enabled
+          ? (newValue) {
+              toSendTimer?.cancel();
+              if ((position - newValue).abs() < 1.0) return;
+              setState(() => position = newValue);
+            }
+          : null,
+      max: 100,
+      min: 0,
+      divisions: 100,
+      label: '${position.round()}',
+      onChangeStart: (_) => toSendTimer?.cancel(),
+      onChangeEnd: (newValue) {
+        toSendTimer?.cancel();
+        if ((position - widget.position.value).abs() < 1.0) return;
+        toSendTimer = Timer(throttleToSend, () {
+          widget.onChange(newValue.truncate());
+        });
+      },
+    );
+  }
+}
+
+Widget divider(String text, {rightFlex = 10}) => Padding(
+      padding: EdgeInsets.only(top: 15, bottom: 5),
+      child: Row(
+        children: <Widget>[
+          Expanded(
+            child: Divider(),
+          ),
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: 10),
+            child: Text(
+              text,
+            ),
+          ),
+          Expanded(flex: rightFlex, child: Divider())
+        ],
+      ),
+    );
+
+Widget dropdownButtonInt(ValueNotifier<int> value, int count) {
+  return ValueListenableBuilder(
+      valueListenable: value,
+      builder: (_, _value, __) => DropdownButton<int>(
+          autofocus: true,
+          isExpanded: true,
+          isDense: true,
+          value: _value,
+          items: [
+            for (int i = 1; i <= count; i++)
+              DropdownMenuItem(
+                child: Text('$i'),
+                value: i,
+              )
+          ],
+          onChanged: (newVal) => value.value = newVal));
+}
+
+Widget fieldForTAVLine(InstanceViewState state, Function(String cmd, String msg) onSend, bool isConnected) {
+  final TextEditingController _controller = TextEditingController(text: state.textTAV);
+  final _notifier = ChangeValueNotifier();
+  _send() {
+    onSend(state.modeTAV, state.textTAV);
+    if (state.modeTAV != 'VOICE') _controller.text = '';
+  }
+
+  _controller.addListener(() {
+    if (_controller.text == state.textTAV) return;
+    final reBuild = state.modeTAV != 'VOICE' && (_controller.text == '' || state.textTAV == '');
+    state.textTAV = _controller.text;
+    if (reBuild) _notifier.notifyListeners();
+  });
+  return ValueListenableBuilder(
+      valueListenable: _notifier,
+      builder: (_, __, ___) {
+        final toSend = !isConnected || (state.modeTAV != 'VOICE' && state.textTAV == '') ? null : _send;
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            DropdownButton<String>(
+              itemHeight: 56,
+              items: <String>['TTS', 'ASK', 'VOICE'].map<DropdownMenuItem<String>>((String value) {
+                return DropdownMenuItem<String>(
+                  value: value,
+                  child: Text(value),
+                );
+              }).toList(),
+              value: state.modeTAV,
+              onChanged: (val) {
+                state.modeTAV = val;
+                _notifier.notifyListeners();
+              },
+            ),
+            Expanded(
+              child: TextField(
+                textInputAction: TextInputAction.send,
+                maxLines: 1,
+                onEditingComplete: toSend,
+                autofocus: false,
+                controller: _controller,
+                enabled: state.modeTAV != 'VOICE' && isConnected,
+              ),
+            ),
+            IconButton(
+              onPressed: toSend,
+              icon: Icon(toSend != null ? Icons.send : Icons.do_not_disturb_on),
+            )
+          ],
+        );
+      });
+}
