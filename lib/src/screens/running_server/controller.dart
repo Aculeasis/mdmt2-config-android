@@ -82,18 +82,30 @@ class _ControllerViewState extends State<ControllerView> {
         child: Column(
           children: <Widget>[
             divider('Status'),
-            terminalStatusLine(),
+            Padding(
+              padding: EdgeInsets.symmetric(horizontal: 5),
+              child: terminalStatusLine(),
+            ),
             divider('Creating models'),
             Padding(
-              padding: EdgeInsets.symmetric(horizontal: 8),
+              padding: EdgeInsets.symmetric(horizontal: 5),
               child: creatingModels2Line(context),
             ),
             divider('TTS/ASK/VOICE'),
-            fieldForTAVLine(widget.view, (cmd, msg) => widget.control.executeMe(cmd, data: msg), _isConnected),
+            Padding(
+              padding: EdgeInsets.symmetric(horizontal: 5),
+              child: fieldForTAVLine(widget.view, (cmd, msg) => widget.control.executeMe(cmd, data: msg), _isConnected),
+            ),
             divider('Music'),
-            musicLine(),
+            Padding(
+              padding: EdgeInsets.symmetric(horizontal: 15),
+              child: musicLine(),
+            ),
             divider('Maintenance'),
-            maintenance2Line(),
+            Padding(
+              padding: EdgeInsets.symmetric(horizontal: 15),
+              child: maintenance2Line(),
+            ),
           ],
         ),
       )),
@@ -181,11 +193,12 @@ class _ControllerViewState extends State<ControllerView> {
     return Row(
       children: <Widget>[
         Text('Volume:'),
-        VolumeSlider(
+        Expanded(
+            child: VolumeSlider(
           widget.view.volume,
           (newVal) => widget.control.executeMe('volume', data: newVal),
           enabled: _isConnected,
-        ),
+        )),
         talkStatus(),
         recordStatus()
       ],
@@ -197,14 +210,11 @@ class _ControllerViewState extends State<ControllerView> {
         valueListenable: widget.view.buttons['talking'],
         builder: (_, value, __) {
           value &= _isConnected;
-          return SizedBox(
-            width: 26.0,
-            height: 26.0,
-            child: IconButton(
-              onPressed: value ? () {} : null,
-              padding: EdgeInsets.zero,
-              icon: Icon(value ? Icons.volume_up : Icons.volume_off),
-            ),
+          return IconButton(
+            constraints: BoxConstraints.tightFor(height: 26, width: 26),
+            onPressed: value ? () {} : null,
+            padding: EdgeInsets.zero,
+            icon: Icon(value ? Icons.volume_up : Icons.volume_off),
           );
         });
   }
@@ -214,14 +224,11 @@ class _ControllerViewState extends State<ControllerView> {
         valueListenable: widget.view.buttons['record'],
         builder: (_, value, __) {
           value &= _isConnected;
-          return SizedBox(
-            width: 26.0,
-            height: 26.0,
-            child: IconButton(
-              onPressed: value ? () {} : null,
-              padding: EdgeInsets.zero,
-              icon: Icon(value ? Icons.mic : Icons.mic_off),
-            ),
+          return IconButton(
+            constraints: BoxConstraints.tightFor(height: 26, width: 26),
+            onPressed: value ? () {} : null,
+            padding: EdgeInsets.zero,
+            icon: Icon(value ? Icons.mic : Icons.mic_off),
           );
         });
   }
@@ -249,22 +256,26 @@ class _ControllerViewState extends State<ControllerView> {
             label = status.toString().split('.').last;
             label = label[0].toUpperCase() + label.substring(1);
           }
+          final VisualDensity visualDensity = Theme.of(context).visualDensity;
           return Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: <Widget>[
-              RaisedButton.icon(
-                  //elevation: 1,
-                  onPressed: enable ? () => widget.control.executeMe(cmd) : null,
-                  icon: Icon(icon),
-                  label: Text(label)),
-              VolumeSlider(
-                widget.view.musicVolume,
-                (newVal) => widget.control.executeMe('mvolume', data: newVal),
-                enabled: enable,
+              Container(
+                constraints: visualDensity.effectiveConstraints(BoxConstraints(minWidth: 105.0)),
+                child: RaisedButton.icon(
+                    onPressed: enable ? () => widget.control.executeMe(cmd) : null,
+                    icon: Icon(icon),
+                    label: Text(label)),
               ),
-              SizedBox(
-                width: 30,
-                height: 30,
+              Expanded(
+                child: VolumeSlider(
+                  widget.view.musicVolume,
+                  (newVal) => widget.control.executeMe('mvolume', data: newVal),
+                  enabled: enable,
+                ),
+              ),
+              Container(
+                constraints: visualDensity.effectiveConstraints(BoxConstraints.tightFor(height: 36, width: 36)),
                 child: RaisedButton(
                     onPressed: enable
                         ? () {
@@ -289,7 +300,7 @@ class _ControllerViewState extends State<ControllerView> {
         0: FractionColumnWidth(.18),
         2: FractionColumnWidth(.015),
         4: FractionColumnWidth(.16),
-        5: FractionColumnWidth(0.08)
+        5: FractionColumnWidth(.1)
       },
       defaultVerticalAlignment: TableCellVerticalAlignment.middle,
       children: [makeModelLine(context), makeSampleLine()],
@@ -465,20 +476,31 @@ Widget fieldForTAVLine(InstanceViewState state, Function(String cmd, String msg)
         return Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            DropdownButton<String>(
-              itemHeight: 56,
-              items: <String>['TTS', 'ASK', 'VOICE'].map<DropdownMenuItem<String>>((String value) {
-                return DropdownMenuItem<String>(
-                  value: value,
-                  child: Text(value),
-                );
-              }).toList(),
-              value: state.modeTAV,
-              onChanged: (val) {
-                state.modeTAV = val;
-                _notifier.notifyListeners();
-              },
-            ),
+            Container(
+                decoration: BoxDecoration(
+                  border: Border(
+                      bottom: BorderSide(
+                    color: Color(0xFFBDBDBD),
+                    width: 0.0,
+                  )),
+                ),
+                child: Padding(
+                  padding: EdgeInsets.only(left: 5),
+                  child: DropdownButton<String>(
+                    underline: SizedBox(),
+                    items: <String>['TTS', 'ASK', 'VOICE'].map<DropdownMenuItem<String>>((String value) {
+                      return DropdownMenuItem<String>(
+                        value: value,
+                        child: Text(value.length < 5 ? '  $value' : value),
+                      );
+                    }).toList(),
+                    value: state.modeTAV,
+                    onChanged: (val) {
+                      state.modeTAV = val;
+                      _notifier.notifyListeners();
+                    },
+                  ),
+                )),
             Expanded(
               child: TextField(
                 textInputAction: TextInputAction.send,

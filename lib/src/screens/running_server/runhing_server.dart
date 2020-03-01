@@ -306,7 +306,7 @@ class _LogListViewState extends State<LogListView> with SingleTickerProviderStat
                     builder: (context, _, __) => ValueListenableBuilder(
                         valueListenable: widget.server.states.unreadMessages,
                         builder: (context, _, __) => Container(
-                              margin: EdgeInsets.only(right: 5, left: 5, bottom: 10),
+                              padding: EdgeInsets.symmetric(horizontal: 5),
                               child: ListView.builder(
                                   controller: _logScroll,
                                   reverse: true,
@@ -315,7 +315,13 @@ class _LogListViewState extends State<LogListView> with SingleTickerProviderStat
                                   padding: EdgeInsets.zero,
                                   itemBuilder: (context, i) {
                                     if (i >= widget.log.length) return null;
-                                    return _buildLogLineView(widget.view.style, widget.log[i]);
+                                    final line = _buildLogLineView(widget.view.style, widget.log[i]);
+                                    return i == 0
+                                        ? Padding(
+                                            padding: EdgeInsets.only(bottom: 15),
+                                            child: line,
+                                          )
+                                        : line;
                                   }),
                             ))),
                 Align(
