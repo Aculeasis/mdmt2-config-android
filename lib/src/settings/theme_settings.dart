@@ -10,7 +10,7 @@ final _darkTheme = ThemeData.dark().copyWith(
         ThemeData.dark().snackBarTheme.copyWith(backgroundColor: ColorScheme.dark().onSurface.withOpacity(.6)));
 
 ThemeData _buildAmoledTheme() => _darkTheme.copyWith(
-      toggleableActiveColor: Colors.redAccent,
+      toggleableActiveColor: Colors.purple[700],
       dividerColor: Colors.deepOrange,
       highlightColor: Colors.indigo.withOpacity(0.5),
       cardColor: Colors.grey[900],
@@ -23,6 +23,20 @@ ThemeData _buildAmoledTheme() => _darkTheme.copyWith(
       buttonTheme: _darkTheme.buttonTheme.copyWith(buttonColor: Colors.redAccent, textTheme: ButtonTextTheme.primary),
     );
 
+ThemeData _buildAmoledTheme2() => _darkTheme.copyWith(
+      toggleableActiveColor: Colors.teal[400],
+      dividerColor: Colors.deepOrange[100],
+      highlightColor: Colors.indigo[100].withOpacity(0.5),
+      cardColor: Colors.grey[900],
+      scaffoldBackgroundColor: Colors.black,
+      canvasColor: Colors.black,
+      primaryColor: Colors.black,
+      accentColor: Colors.purple[200],
+      dialogBackgroundColor: Colors.grey[900],
+      backgroundColor: Colors.black,
+      buttonTheme: _darkTheme.buttonTheme.copyWith(buttonColor: Colors.red[100], textTheme: ButtonTextTheme.primary),
+    );
+
 class ThemeSettings extends ChangeNotifier {
   static const _app_theme = 'app_theme';
   static final _themesMap = {
@@ -30,9 +44,10 @@ class ThemeSettings extends ChangeNotifier {
     'Light': _lightTheme,
     'Dark': _darkTheme,
     'Amoled': _buildAmoledTheme(),
+    'Amoled2': _buildAmoledTheme2(),
     'Pink': ThemeData(primarySwatch: Colors.pink),
   };
-  String _theme = 'Amoled';
+  String _theme = 'Dark';
   bool isLoaded = false;
 
   ThemeSettings() {

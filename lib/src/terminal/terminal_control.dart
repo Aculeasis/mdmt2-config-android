@@ -19,7 +19,7 @@ class TerminalControl extends TerminalClient {
     'stop': MusicStatus.stop,
     'disabled': MusicStatus.nope,
   };
-  static const allowValueCMD = {'tts', 'ask', 'rec', 'listener', 'volume', 'mvolume', 'backup.restore'};
+  static const allowValueCMD = {'tts', 'ask', 'rec', 'volume', 'mvolume', 'backup.restore'};
   static const allowEmptyCMD = {
     'voice',
     'maintenance.reload',
@@ -81,9 +81,7 @@ class TerminalControl extends TerminalClient {
     callJRPC('get',
         params: ['listener', 'volume', 'mvolume', 'mstate'],
         handler: AsyncResponseHandler((_, response) {
-          final listener = _getFromMap<bool>('listener', response);
-          view.listener.value = listener ?? view.listener.value;
-
+          view.listenerOnOff.value = _getFromMap<bool>('listener', response) ?? view.listenerOnOff.value;
           view.volume.value = _volumeSanitize(_getFromMap<int>('volume', response));
           view.musicVolume.value = _volumeSanitize(_getFromMap<int>('mvolume', response));
           view.musicStatus.value = _mStateSanitize(_getFromMap<String>('mstate', response));
@@ -91,15 +89,25 @@ class TerminalControl extends TerminalClient {
 
     callJRPC('subscribe',
         params: subscribeTo,
-        handler: AsyncResponseHandler((_, response) {
-          bool state;
-          try {
-            state = response.result.value;
-          } catch (e) {
-            pPrint('Wrong subscribe result: $e');
-          }
-          if (state) {
+        handler: AsyncResponseHandler((method, response) {
+          if ((_getResponseAs(method, response) ?? false)) {
             for (String cmd in subscribeTo) addRequestHandler('notify.$cmd', _handleNotify);
+          }
+        }, null));
+    if (view.catchQryStatus.value) _cmdSubscriber(true);
+  }
+
+  void _cmdSubscriber(bool subscribe) {
+    final cmd = subscribe ? 'subscribe' : 'unsubscribe';
+    callJRPC(cmd,
+        params: ['cmd'],
+        handler: AsyncResponseHandler((method, response) {
+          if ((_getResponseAs(method, response) ?? false)) {
+            if (subscribe)
+              addRequestHandler('notify.cmd', _handleNotify);
+            else
+              removeRequestHandler('notify.cmd');
+            view.catchQryStatus.value = subscribe;
           }
         }, null));
   }
@@ -109,9 +117,16 @@ class TerminalControl extends TerminalClient {
   }
 
   void _externalCMD(String cmd, dynamic data) {
+    if (cmd == 'qry') {
+      _cmdSubscriber(!view.catchQryStatus.value);
+      return;
+    }
+
     bool wrongData() => data == null || (data is String && data == '');
     dynamic params;
-    if (cmd == 'ping') {
+    if (cmd == 'listener') {
+      params = [view.listenerOnOff.value ? 'off' : 'on'];
+    } else if (cmd == 'ping') {
       params = {'time': DateTime.now().microsecondsSinceEpoch};
     } else if (cmd == 'play') {
       if (!wrongData()) params = ['$data'];
@@ -197,7 +212,7 @@ class TerminalControl extends TerminalClient {
         _callToast('Backup: $value');
         break;
       case 'listener':
-        view.listener.value = _getFirstArg<bool>(request) ?? view.listener.value;
+        view.listenerOnOff.value = _getFirstArg<bool>(request) ?? view.listenerOnOff.value;
         break;
       case 'volume':
         view.volume.value = _volumeSanitize(_getFirstArg<int>(request));
@@ -207,6 +222,13 @@ class TerminalControl extends TerminalClient {
         break;
       case 'music_status':
         view.musicStatus.value = _mStateSanitize(_getFirstArg<String>(request));
+        break;
+      case 'cmd':
+        final msg = _getKWArgsValue<String>('qry', request);
+        String username = _getKWArgsValue<String>('username', request, noError: true) ?? '';
+        if (msg == null) return;
+        if (username.isNotEmpty) username = ', User: "$username"';
+        _callToast('QRY: "$msg"$username');
         break;
       default:
         pPrint('Unknown notification $method: $request');
@@ -245,6 +267,29 @@ class TerminalControl extends TerminalClient {
       error = e;
     }
     if (result == null) pPrint('Error parsing $request: $error');
+    return result;
+  }
+
+  T _getKWArgsValue<T>(String key, Request request, {bool noError = false}) {
+    T result;
+    dynamic error;
+    try {
+      result = request.params['kwargs'][key];
+    } catch (e) {
+      error = e;
+    }
+    if (result == null && !noError) pPrint('Error parsing $request: $error');
+    return result;
+  }
+
+  T _getResponseAs<T>(String method, Response response) {
+    T result;
+    try {
+      result = response.result.value;
+    } catch (e) {
+      pPrint('Wrong response to $method result: $e');
+      return null;
+    }
     return result;
   }
 }

@@ -84,7 +84,7 @@ class InstanceViewState {
   final sampleIndex = ValueNotifier<int>(1);
 
   //listener OnOff
-  final listener = ValueNotifier<bool>(false);
+  final listenerOnOff = ValueNotifier<bool>(false);
 
   final buttons = {
     'talking': ResettableBoolNotifier(Duration(seconds: 60)),
@@ -96,6 +96,8 @@ class InstanceViewState {
   };
 
   final musicStatus = ValueNotifier<MusicStatus>(MusicStatus.error);
+  // Перехват сообщения для сервера (command.php?qry=)
+  final catchQryStatus = ValueNotifier<bool>(false);
 
   //volume
   final volume = ValueNotifier<int>(-1);
@@ -295,7 +297,7 @@ class InstancesController extends _BLoC {
     _runInstance(instance?.logger);
     _runInstance(instance?.control);
 
-    if (instance != null) result(instance);
+    if (result != null && instance != null) result(instance);
   }
 
   void _runInstance(TerminalClient inst) {

@@ -152,16 +152,7 @@ class _ControllerViewState extends State<ControllerView> {
                 child: Text('Stop'),
               )),
       SizedBox(),
-      ValueListenableBuilder(
-          valueListenable: widget.view.listener,
-          builder: (_, isOn, __) {
-            final onOff = isOn ? 'OFF' : 'ON';
-            return RaisedButton(
-              padding: EdgeInsets.all(2),
-              onPressed: _isConnected ? () => widget.control.executeMe('listener', data: onOff.toLowerCase()) : null,
-              child: Text('Listen $onOff'),
-            );
-          }),
+      _radioButton(widget.view.listenerOnOff, label: 'Listen', callBack: () => widget.control.executeMe('listener')),
     ]);
   }
 
@@ -183,7 +174,7 @@ class _ControllerViewState extends State<ControllerView> {
                 child: Text('Restore*'),
               )),
       SizedBox(),
-      SizedBox(), //
+      _radioButton(widget.view.catchQryStatus, label: 'QRY', callBack: () => widget.control.executeMe('qry')),
       SizedBox(),
       SizedBox(), //
     ]);
@@ -348,6 +339,40 @@ class _ControllerViewState extends State<ControllerView> {
       SizedBox(),
       dropdownButtonInt(widget.view.sampleIndex, 3),
     ]);
+  }
+
+  Widget _radioButton(ValueNotifier<bool> valueListenable, {Function callBack, String label}) {
+    final themeOff = Theme.of(context);
+    final themeOn = themeOff.copyWith(disabledColor: themeOff.toggleableActiveColor);
+    return ValueListenableBuilder(
+        valueListenable: valueListenable,
+        child: Padding(
+          padding: EdgeInsets.only(right: 10),
+          child: Text(label),
+        ),
+        builder: (_, isCatch, child) => RaisedButton(
+              padding: EdgeInsets.all(2),
+              onPressed: _isConnected ? callBack : null,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: <Widget>[
+                  child,
+                  SizedBox(
+                    width: 10,
+                    height: 10,
+                    child: Theme(
+                      data: isCatch ? themeOn : themeOff,
+                      child: Radio<bool>(
+                        value: isCatch,
+                        groupValue: true,
+                        onChanged: null,
+                      ),
+                    ),
+                  )
+                ],
+              ),
+            ));
   }
 }
 

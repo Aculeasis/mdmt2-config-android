@@ -160,6 +160,8 @@ abstract class TerminalClient {
   // Для входящих запросов (уведомления)
   @protected
   void addRequestHandler(String method, void Function(Request request) handler) => _requestHandlers[method] = handler;
+  @protected
+  void removeRequestHandler(String method) => _requestHandlers.remove(method);
 
   TerminalClient(this.server, this.mode, this._workerNotifyGlobal, {this.log, this.name}) {
     _workSignal.stream.listen((event) {
@@ -460,6 +462,7 @@ abstract class TerminalClient {
       onOk();
     } else if (mode == WorkingMode.controller) {
       stage = ConnectStage.sendDuplex;
+      // FIXME DEPRECATED: params не нужен с mdmTerminal2 0.15.7, потом убрать
       callJRPC(mDuplex, params: {'notify': false});
     } else {
       stage = ConnectStage.happy;
