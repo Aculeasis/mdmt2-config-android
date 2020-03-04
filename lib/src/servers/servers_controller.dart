@@ -21,7 +21,7 @@ class InstancesState {
 }
 
 class ServersController extends ServersManager {
-  final style = LogStyle()..loadAll();
+  final style = LogStyle()..loadAsBaseStyle();
   final _state = InstancesState();
   final _startStopChange = StreamController<WorkingNotification>.broadcast();
   final _stateStream = BehaviorSubject<InstancesState>();

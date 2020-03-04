@@ -1,6 +1,8 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
-import 'package:mdmt2_config/src/terminal/log.dart';
 import 'package:mdmt2_config/src/misc.dart';
+import 'package:mdmt2_config/src/terminal/log.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 const timeFormats = {
@@ -10,11 +12,13 @@ const timeFormats = {
   'None': null,
 };
 
-class _Keys {
-  static const lvl = 'style_lvl';
-  static const fontSize = 'style_fontSize';
-  static const timeFormat = 'style_timeFormat';
-  static const callLvl = 'style_callLvl';
+const _defaultLogStyle = 'def_log_slyle';
+
+class _N {
+  static const lvl = '1';
+  static const fontSize = '2';
+  static const timeFormat = '3';
+  static const callLvl = '4';
 }
 
 class LogStyle extends ChangeValueNotifier {
@@ -71,6 +75,22 @@ class LogStyle extends ChangeValueNotifier {
     }
   }
 
+  LogStyle();
+
+  LogStyle.fromJson(Map<String, dynamic> json) {
+    lvl = LogLevel.values[json[_N.lvl]] ?? lvl;
+    fontSize = json[_N.fontSize] ?? fontSize;
+    timeFormat = json[_N.timeFormat] ?? timeFormat;
+    callLvl = json[_N.callLvl] ?? callLvl;
+  }
+
+  Map<String, dynamic> toJson() => {
+        _N.lvl: lvl.index,
+        _N.fontSize: fontSize,
+        _N.timeFormat: timeFormat,
+        _N.callLvl: callLvl,
+      };
+
   bool upgrade(LogStyle o) {
     if (isEqual(o)) return false;
     _noNotify = true;
@@ -97,27 +117,25 @@ class LogStyle extends ChangeValueNotifier {
 
   LogStyle clone() => LogStyle().._upgrade(this);
 
-  void loadAll() {
+  void loadAsBaseStyle() {
     SharedPreferences.getInstance().then((p) {
+      final data = p.getString(_defaultLogStyle);
+      if (data == null) return;
+      LogStyle result;
+      try {
+        result = LogStyle.fromJson(jsonDecode(data));
+      } catch (e) {
+        debugPrint(' * loadAsBaseStyle error: $e');
+        return;
+      }
       _noNotify = true;
-      final _lvl = p.getInt(_Keys.lvl);
-      if (_lvl != null && _lvl > -1 && _lvl < LogLevel.values.length) lvl = LogLevel.values[_lvl];
-
-      fontSize = p.getInt(_Keys.fontSize) ?? fontSize;
-
-      final _timeFormat = p.getString(_Keys.timeFormat);
-      if (timeFormats.containsKey(_timeFormat)) timeFormat = _timeFormat;
-
-      callLvl = p.getInt(_Keys.callLvl) ?? callLvl;
+      _upgrade(result);
       _noNotify = false;
     });
   }
 
-  saveAll() async {
+  saveAsBaseStyle() async {
     await SharedPreferences.getInstance()
-      ..setInt(_Keys.lvl, lvl.index)
-      ..setInt(_Keys.fontSize, fontSize)
-      ..setString(_Keys.timeFormat, timeFormat)
-      ..setInt(_Keys.callLvl, callLvl);
+      ..setString(_defaultLogStyle, jsonEncode(this));
   }
 }

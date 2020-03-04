@@ -141,9 +141,16 @@ class _RunningServerPage extends State<RunningServerPage> with SingleTickerProvi
                   : () {
                       widget.baseStyle
                         ..upgrade(widget.srv.inst.view.style)
-                        ..saveAll();
+                        ..saveAsBaseStyle();
                     }),
         ),
+        ValueListenableBuilder(
+            valueListenable: widget.baseStyle,
+            builder: (_, __, ___) => _loggerFlatButton(
+                'Reset',
+                widget.baseStyle.isEqual(widget.srv.inst.view.style)
+                    ? null
+                    : () => widget.srv.inst.view.style.upgrade(widget.baseStyle))),
         _loggerFlatButton(
             'Default',
             widget.srv.inst.view.style.isEqual(LogStyle())
