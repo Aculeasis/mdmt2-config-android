@@ -2,7 +2,7 @@ import 'dart:collection';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:mdmt2_config/src/servers/server_data.dart';
+import 'package:mdmt2_config/src/misc.dart';
 import 'package:mdmt2_config/src/settings/log_style.dart';
 
 enum LogLevel { debug, info, warn, error, critical, system }
@@ -33,7 +33,7 @@ class LogLine {
 }
 
 class Log {
-  final ServerDataStates _serverStates;
+  final UnreadMessages _unreadMessages;
   final LogStyle _style;
   static const maxLength = 1000;
   final _log = ListQueue<LogLine>();
@@ -41,7 +41,7 @@ class Log {
 
   LogLevel _lvl;
 
-  Log(this._style, this._serverStates) {
+  Log(this._style, this._unreadMessages) {
     _lvl = _style.lvl;
     _style.addListener(_setLvl);
   }
@@ -49,19 +49,18 @@ class Log {
   void dispose() {
     debugPrint('DISPOSE LOG');
     _style.removeListener(_setLvl);
-    _serverStates.messagesRead();
+    _unreadMessages.messagesRead();
   }
 
   LogLine operator [](int index) => _actualLog.elementAt(index);
   int get length => _actualLog.length;
-  //LogLevel get lvl => _lvl;
   bool get isNotEmpty => _actualLog.length > 0;
 
   void clear() {
     if (!isNotEmpty) return;
     _log.clear();
     _actualLog.clear();
-    _serverStates.messagesClear();
+    _unreadMessages.messagesClear();
   }
 
   _setLvl() {
@@ -75,7 +74,7 @@ class Log {
     if (line.lvl.index < _lvl.index) return false;
     if (_actualLog.length >= maxLength) _actualLog.removeLast();
     _actualLog.addFirst(line);
-    _serverStates.messagesNew();
+    _unreadMessages.messagesNew();
     return true;
   }
 

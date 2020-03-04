@@ -2,24 +2,8 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:mdmt2_config/src/terminal/terminal_instance.dart';
-import 'package:mdmt2_config/src/utils.dart';
+import 'package:mdmt2_config/src/misc.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-
-class ServerDataStates {
-  final changeNotify = ChangeValueNotifier();
-  final unreadMessages = ValueNotifier<int>(0);
-
-  void notifyListeners() => changeNotify.notifyListeners();
-  void messagesNew() => unreadMessages.value += 1;
-  void messagesRead() => unreadMessages.value = 0;
-  void messagesClear() {
-    if (unreadMessages.value != 0)
-      messagesRead();
-    else
-      // ignore: invalid_use_of_visible_for_testing_member, invalid_use_of_protected_member
-      unreadMessages.notifyListeners();
-  }
-}
 
 class _Name {
   static const _prefix = 'srv_d';
@@ -68,8 +52,7 @@ Future<void> removeServerData(int index) async {
   debugPrint(' * remove id $index');
 }
 
-class ServerData {
-  final states = ServerDataStates();
+class ServerData extends ChangeThrottledValueNotifier {
   TerminalInstance inst;
   String name, token, wsToken, ip;
   int _port;
@@ -124,7 +107,7 @@ class ServerData {
   bool upgrade(ServerData o) {
     if (isEqual(o) || o.name == '') return false;
     _upgrade(o);
-    states.notifyListeners();
+    notifyListeners();
     return true;
   }
 

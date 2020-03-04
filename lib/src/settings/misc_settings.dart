@@ -1,8 +1,9 @@
+import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class _Keys {
   static const openOnRunning = 'ms_oor';
-  static const autoReconnectAfterReboot = 'arar';
+  static const autoReconnectAfterReboot = 'ms_arar';
 }
 
 class MiscSettings {
@@ -10,6 +11,9 @@ class MiscSettings {
   bool _openOnRunning = false;
   // Переподключаться после ребута, сек. 0 - отключено.
   int _autoReconnectAfterReboot = 10;
+  // Задержка всяких обновлений для уменьшения частоты перерисовки виджетов
+  final throttleTime = Duration(milliseconds: 60);
+
   static final MiscSettings _instance = MiscSettings._();
 
   factory MiscSettings() => _instance;

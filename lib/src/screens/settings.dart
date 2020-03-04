@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:mdmt2_config/src/dialogs.dart';
 import 'package:mdmt2_config/src/settings/misc_settings.dart';
 import 'package:mdmt2_config/src/settings/theme_settings.dart';
-import 'package:mdmt2_config/src/utils.dart';
+import 'package:mdmt2_config/src/misc.dart';
 import 'package:mdmt2_config/src/widgets.dart';
 import 'package:provider/provider.dart';
 

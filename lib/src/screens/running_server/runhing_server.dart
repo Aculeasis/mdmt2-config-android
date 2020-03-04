@@ -82,7 +82,7 @@ class _RunningServerPage extends State<RunningServerPage> with SingleTickerProvi
         Container(
           constraints: BoxConstraints.expand(),
           child: widget.srv.inst?.log != null
-              ? LogListView(widget.srv.inst.log, widget.srv.inst.view, widget.srv.states.unreadMessages)
+              ? LogListView(widget.srv.inst.log, widget.srv.inst.view, widget.srv.inst.view.unreadMessages)
               : _disabledBody(),
         ),
         ValueListenableBuilder(
@@ -162,7 +162,7 @@ class _RunningServerPage extends State<RunningServerPage> with SingleTickerProvi
       verticalDirection: VerticalDirection.down,
       children: <Widget>[
         ValueListenableBuilder(
-          valueListenable: widget.srv.states.unreadMessages,
+          valueListenable: widget.srv.inst.view.unreadMessages,
           builder: (_, __, ___) => _loggerFlatButton(
             'Clear log',
             widget.srv.inst.log.isNotEmpty ? widget.srv.inst.log.clear : null,

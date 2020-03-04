@@ -33,6 +33,7 @@ dependencies:
   upnp: ^2.0.0+1
   url_launcher: ^5.4.2
   font_awesome_flutter: ^8.7.0
+  rxdart: ^0.23.1
 
 dev_dependencies:
   flutter_test:

@@ -30,7 +30,7 @@ class MainServersPage extends StatelessWidget {
           for (var server in servers.loop)
             ValueListenableBuilder(
                 key: ObjectKey(server),
-                valueListenable: server.states.changeNotify,
+                valueListenable: server,
                 builder: (context, __, _) => _buildRow(context, servers, server))
         else
           ListTile(
@@ -56,7 +56,7 @@ class MainServersPage extends StatelessWidget {
       if (_server?.inst != null)
         Navigator.of(context)
             .push(MaterialPageRoute(builder: (context) => RunningServerPage(_server, servers.style)))
-            .then((value) => _server.states.messagesRead());
+            .then((value) => _server.inst?.view?.unreadMessages?.messagesRead());
     }
 
     void openPageCallback(ServerData _server) {
@@ -203,8 +203,9 @@ class MainServersPage extends StatelessWidget {
   }
 
   Widget _newMessagesIcon(BuildContext context, ServerData server) {
+    if (server.inst?.view?.unreadMessages == null) return SizedBox();
     return ValueListenableBuilder(
-        valueListenable: server.states.unreadMessages,
+        valueListenable: server.inst.view.unreadMessages,
         builder: (_, count, __) {
           if (count == 0) return SizedBox();
           count = count < 99 ? count : 99;

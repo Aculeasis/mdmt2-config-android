@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:mdmt2_config/src/terminal/log.dart';
-import 'package:mdmt2_config/src/utils.dart';
+import 'package:mdmt2_config/src/misc.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 const timeFormats = {

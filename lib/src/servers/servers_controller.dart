@@ -3,12 +3,14 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:mdmt2_config/src/servers/server_data.dart';
 import 'package:mdmt2_config/src/settings/log_style.dart';
+import 'package:mdmt2_config/src/settings/misc_settings.dart';
 import 'package:mdmt2_config/src/terminal/instance_view_state.dart';
 import 'package:mdmt2_config/src/terminal/log.dart';
 import 'package:mdmt2_config/src/terminal/terminal_client.dart';
 import 'package:mdmt2_config/src/terminal/terminal_control.dart';
 import 'package:mdmt2_config/src/terminal/terminal_instance.dart';
 import 'package:mdmt2_config/src/terminal/terminal_logger.dart';
+import 'package:rxdart/rxdart.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 part 'package:mdmt2_config/src/blocs/servers_controller.dart';
@@ -21,12 +23,14 @@ class InstancesState {
 class ServersController extends ServersManager {
   final style = LogStyle()..loadAll();
   final _state = InstancesState();
-  final StreamController<WorkingNotification> _startStopChange = StreamController<WorkingNotification>.broadcast();
-  final StreamController<InstancesState> _stateStream = StreamController<InstancesState>.broadcast();
+  final _startStopChange = StreamController<WorkingNotification>.broadcast();
+  final _stateStream = BehaviorSubject<InstancesState>();
+  Stream<InstancesState> stateStream;
 
   ServersController() {
+    stateStream = _stateStream.throttleTime(MiscSettings().throttleTime, trailing: true);
     _startStopChange.stream.listen((event) {
-      event.server.states.notifyListeners();
+      event.server.notifyListeners();
       if (event.signal == WorkingStatChange.connecting)
         _state.active++;
       else if (event.signal == WorkingStatChange.closing)
@@ -54,8 +58,6 @@ class ServersController extends ServersManager {
     _stateStream.add(_state);
   }
 
-  Stream<InstancesState> get stateStream => _stateStream.stream;
-
   void _clearAllInput() {
     for (var server in loop) _clearInput(server);
   }
@@ -74,7 +76,7 @@ class ServersController extends ServersManager {
       if (diff > 0 && notify) _sendState();
       inst.dispose();
     }
-    if (notify) server.states.notifyListeners();
+    if (notify) server.notifyListeners();
     return true;
   }
 
@@ -110,7 +112,7 @@ class ServersController extends ServersManager {
     instance ??= TerminalInstance(null, null, null, InstanceViewState(style.clone()), Reconnect(() => run(server)));
     int incCounts = 0;
     if (server.logger) {
-      instance.log ??= Log(instance.view.style, server.states);
+      instance.log ??= Log(instance.view.style, instance.view.unreadMessages);
       if (instance.logger == null)
         instance.logger = TerminalLogger(server, _startStopChange, instance.log);
       else
@@ -135,10 +137,9 @@ class ServersController extends ServersManager {
 
     if ((instance.logger ?? instance.control) != null) {
       server.inst = instance;
-      server.states.notifyListeners();
+      server.notifyListeners();
       _state.counts += incCounts;
       if (incCounts > 0) _sendState();
-      server.states.notifyListeners();
     } else
       instance.dispose();
   }

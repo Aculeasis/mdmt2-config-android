@@ -26,8 +26,7 @@ abstract class ServersManager extends _BLoC {
 
   bool _removeInstance(ServerData server, {bool callDispose = true, bool notify = true});
 
-  bool _instanceMayRemoved(ServerData server) =>
-      server?.inst == null || (server.inst.lock == 0 && !server.inst.work);
+  bool _instanceMayRemoved(ServerData server) => server?.inst == null || (server.inst.lock == 0 && !server.inst.work);
 
   void _removeAllInput() {
     for (var server in _servers) if (!_instanceMayRemoved(server)) return;
@@ -35,7 +34,10 @@ abstract class ServersManager extends _BLoC {
     _removeAll();
     _indices.clear();
     if (_servers.isNotEmpty) {
-      for (var server in _servers) _removeInstance(server, notify: false);
+      for (var server in _servers) {
+        server.reset();
+        _removeInstance(server, notify: false);
+      }
       _servers.clear();
       notifyListeners();
     }
@@ -78,6 +80,7 @@ abstract class ServersManager extends _BLoC {
     final name = server?.name;
     final index = indexOf(name);
     if (index > -1 && index < _servers.length && _instanceMayRemoved(server)) {
+      server.reset();
       _removeInstance(server, notify: false);
       _removeByIndex(index);
       if (_servers.isNotEmpty) {

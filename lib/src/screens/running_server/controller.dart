@@ -6,7 +6,7 @@ import 'package:mdmt2_config/src/screens/running_server/backup_list.dart';
 import 'package:mdmt2_config/src/terminal/instance_view_state.dart';
 import 'package:mdmt2_config/src/terminal/terminal_client.dart';
 import 'package:mdmt2_config/src/terminal/terminal_control.dart';
-import 'package:mdmt2_config/src/utils.dart';
+import 'package:mdmt2_config/src/misc.dart';
 import 'package:mdmt2_config/src/widgets.dart';
 
 class ControllerView extends StatefulWidget {
