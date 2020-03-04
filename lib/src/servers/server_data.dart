@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:mdmt2_config/src/terminal/terminal_instance.dart';
 import 'package:mdmt2_config/src/utils.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -69,6 +70,7 @@ Future<void> removeServerData(int index) async {
 
 class ServerData {
   final states = ServerDataStates();
+  TerminalInstance inst;
   String name, token, wsToken, ip;
   int _port;
   bool logger, control, totpSalt;

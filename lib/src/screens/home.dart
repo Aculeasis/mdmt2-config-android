@@ -6,7 +6,7 @@ import 'package:mdmt2_config/src/screens/settings.dart';
 import 'package:mdmt2_config/src/servers/server_data.dart';
 import 'package:mdmt2_config/src/servers/servers_controller.dart';
 import 'package:mdmt2_config/src/settings/misc_settings.dart';
-import 'package:mdmt2_config/src/terminal/instances_controller.dart';
+import 'package:mdmt2_config/src/terminal/terminal_instance.dart';
 import 'package:provider/provider.dart';
 
 enum ServerMenu { connect, edit, remove, view, stop, clone, clear }
@@ -52,21 +52,18 @@ class MainServersPage extends StatelessWidget {
   }
 
   Widget _buildRow(BuildContext context, ServersController servers, ServerData server) {
-    final instances = Provider.of<InstancesController>(context, listen: false);
-    void view({TerminalInstance instance}) {
-      instance ??= instances[server];
-      if (instance != null)
+    void view(ServerData _server) {
+      if (_server?.inst != null)
         Navigator.of(context)
-            .push(
-                MaterialPageRoute(builder: (context) => RunningServerPage(instance, instances.style, server)))
-            .then((value) => server.states.messagesRead());
+            .push(MaterialPageRoute(builder: (context) => RunningServerPage(_server, servers.style)))
+            .then((value) => _server.states.messagesRead());
     }
 
-    void openPageCallback(TerminalInstance instance) {
-      if (Provider.of<MiscSettings>(context, listen: false).openOnRunning) view(instance: instance);
+    void openPageCallback(ServerData _server) {
+      if (Provider.of<MiscSettings>(context, listen: false).openOnRunning) view(_server);
     }
 
-    final state = CollectActualServerState(server, instances[server]);
+    final state = CollectActualServerState(server);
     return ListTile(
       leading: _serverIcon(context, state, server),
       title: Text(
@@ -74,13 +71,9 @@ class MainServersPage extends StatelessWidget {
         maxLines: 1,
       ),
       onTap: () {
-        if (state.isControlled) view();
+        if (state.isControlled) view(server);
       },
-      subtitle: Text(
-        state.subtitle,
-        maxLines: 2,
-        overflow: TextOverflow.ellipsis
-      ),
+      subtitle: Text(state.subtitle, maxLines: 2, overflow: TextOverflow.ellipsis),
       trailing: PopupMenuButton(
         itemBuilder: (context) => [
           if (state.isPartialLogger || state.isPartialControl)
@@ -151,31 +144,29 @@ class MainServersPage extends StatelessWidget {
         onSelected: (value) {
           switch (value) {
             case ServerMenu.connect: // connect && reconnect
-              instances.run(server, result: openPageCallback);
+              servers.run(server, result: openPageCallback);
               debugPrint('-- Run ${server.name}');
               break;
             case ServerMenu.view:
-              view();
+              view(server);
               break;
             case ServerMenu.edit:
               serverFormDialog(context, server, servers.contains).then((value) => servers.upgrade(server, value));
               break;
             case ServerMenu.remove:
               final index = servers.indexOf(server.name);
-              instances.remove(server);
-              servers.remove(server);
-              _undoToast(context, 'Removed "${server.name}"', () {
-                servers.insertAlways(index, server);
-              });
+              servers.remove(server,
+                  result: (_server) =>
+                      _undoToast(context, 'Removed "${_server.name}"', () => servers.insertAlways(index, _server)));
               break;
             case ServerMenu.stop:
-              instances.stop(server);
+              servers.stop(server);
               break;
             case ServerMenu.clone:
               servers.addAlways(server.clone());
               break;
             case ServerMenu.clear:
-              instances.clear(server);
+              servers.clear(server);
               break;
           }
         },
@@ -242,8 +233,7 @@ class MainServersPage extends StatelessWidget {
         });
   }
 
-  Widget _mainPopupMenu(
-      BuildContext context, ServersController servers, InstancesController instances, InstancesState state) {
+  Widget _mainPopupMenu(BuildContext context, ServersController servers, InstancesState state) {
     return PopupMenuButton(
       itemBuilder: (context) => [
         PopupMenuItem(
@@ -292,7 +282,6 @@ class MainServersPage extends StatelessWidget {
                     'Cancel')
                 .then((value) {
               if (value == true) {
-                instances.clearAll();
                 servers.removeAll();
               }
             });
@@ -306,10 +295,10 @@ class MainServersPage extends StatelessWidget {
             showAbout(context);
             break;
           case MainMenu.stopAll:
-            instances.stopAll();
+            servers.stopAll();
             break;
           case MainMenu.clearAll:
-            instances.clearAll();
+            servers.clearAll();
             break;
         }
       },
@@ -317,7 +306,6 @@ class MainServersPage extends StatelessWidget {
   }
 
   Widget _title(InstancesState state) {
-    if (state.counts == 0) return SizedBox();
     return Text(
         '| active: ${state.active}'
         '| inactive: ${state.counts - state.active}'
@@ -334,16 +322,17 @@ class MainServersPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Consumer<InstancesController>(
-            builder: (_, manager, __) => StreamBuilder<InstancesState>(
-                initialData: InstancesState(), stream: manager.stateStream, builder: (_, value) => _title(value.data))),
+        title: StreamBuilder<InstancesState>(
+            initialData: InstancesState(),
+            stream: Provider.of<ServersController>(context, listen: false).stateStream,
+            builder: (_, value) => (value?.data?.counts ?? 0) != 0 ? _title(value.data) : SizedBox()),
         actions: <Widget>[
-          Consumer2<ServersController, InstancesController>(
-            builder: (context, servers, manager, child) => servers.isLoaded
+          Consumer<ServersController>(
+            builder: (context, servers, child) => servers.isLoaded
                 ? StreamBuilder<InstancesState>(
                     initialData: InstancesState(),
-                    stream: manager.stateStream,
-                    builder: (_, val) => _mainPopupMenu(context, servers, manager, val.data))
+                    stream: servers.stateStream,
+                    builder: (_, val) => val.data != null ? _mainPopupMenu(context, servers, val.data) : child)
                 : child,
             child: Container(),
           )

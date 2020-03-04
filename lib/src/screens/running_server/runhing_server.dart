@@ -5,16 +5,15 @@ import 'package:intl/intl.dart';
 import 'package:mdmt2_config/src/screens/running_server/controller.dart';
 import 'package:mdmt2_config/src/servers/server_data.dart';
 import 'package:mdmt2_config/src/settings/log_style.dart';
-import 'package:mdmt2_config/src/terminal/instances_controller.dart';
+import 'package:mdmt2_config/src/terminal/instance_view_state.dart';
 import 'package:mdmt2_config/src/terminal/log.dart';
 import 'package:mdmt2_config/src/terminal/terminal_control.dart';
 
 class RunningServerPage extends StatefulWidget {
-  final TerminalInstance instance;
+  final ServerData srv;
   final LogStyle baseStyle;
-  final ServerData server;
 
-  RunningServerPage(this.instance, this.baseStyle, this.server, {Key key}) : super(key: key);
+  RunningServerPage(this.srv, this.baseStyle, {Key key}) : super(key: key);
 
   @override
   _RunningServerPage createState() => _RunningServerPage();
@@ -27,14 +26,20 @@ class _RunningServerPage extends State<RunningServerPage> with SingleTickerProvi
   void dispose() {
     super.dispose();
     _tabController.dispose();
+    widget.srv.inst.lock -= 1;
   }
 
   @override
   void initState() {
+    widget.srv.inst.lock += 1;
     super.initState();
-    _tabController = TabController(length: 2, vsync: this, initialIndex: widget.instance.view.pageIndex.value);
+    int initialIndex = widget.srv.inst.view.pageIndex.value;
+    if (initialIndex == 0 && widget.srv.inst.logger == null)
+      initialIndex = 1;
+    else if (initialIndex == 1 && widget.srv.inst.control == null) initialIndex = 0;
+    _tabController = TabController(length: 2, vsync: this, initialIndex: initialIndex);
     _tabController.addListener(() {
-      widget.instance.view.pageIndex.value = _tabController.index;
+      widget.srv.inst.view.pageIndex.value = _tabController.index;
     });
   }
 
@@ -62,10 +67,10 @@ class _RunningServerPage extends State<RunningServerPage> with SingleTickerProvi
       IconButton(
         icon: Icon(Icons.import_export),
         onPressed: () {
-          final index = widget.instance.view.pageIndex.value;
+          final index = widget.srv.inst.view.pageIndex.value;
           if (index == 0)
-            widget.instance.view.logExpanded.value = !widget.instance.view.logExpanded.value;
-          else if (index == 1) widget.instance.view.controlExpanded.value = !widget.instance.view.controlExpanded.value;
+            widget.srv.inst.view.logExpanded.value = !widget.srv.inst.view.logExpanded.value;
+          else if (index == 1) widget.srv.inst.view.controlExpanded.value = !widget.srv.inst.view.controlExpanded.value;
         },
       ),
     ];
@@ -76,16 +81,16 @@ class _RunningServerPage extends State<RunningServerPage> with SingleTickerProvi
       children: <Widget>[
         Container(
           constraints: BoxConstraints.expand(),
-          child: widget.instance?.log != null
-              ? LogListView(widget.instance.log, widget.instance.view, widget.server)
+          child: widget.srv.inst?.log != null
+              ? LogListView(widget.srv.inst.log, widget.srv.inst.view, widget.srv.states.unreadMessages)
               : _disabledBody(),
         ),
         ValueListenableBuilder(
-            valueListenable: widget.instance.view.logExpanded,
+            valueListenable: widget.srv.inst.view.logExpanded,
             builder: (_, expanded, child) => expanded ? child : SizedBox(),
             child: Container(
               color: Colors.black.withOpacity(.5),
-              child: widget.instance?.log != null ? _loggerSettings() : _disabledTop(),
+              child: widget.srv.inst?.log != null ? _loggerSettings() : _disabledTop(),
             )),
       ],
     );
@@ -95,17 +100,17 @@ class _RunningServerPage extends State<RunningServerPage> with SingleTickerProvi
     return Column(
       children: <Widget>[
         ValueListenableBuilder(
-          valueListenable: widget.instance.view.controlExpanded,
+          valueListenable: widget.srv.inst.view.controlExpanded,
           builder: (_, expanded, child) => !expanded
               ? child
               : Expanded(
                   child: Container(
                   child:
-                      widget.instance?.control != null ? _controllerSettings(widget.instance.control) : _disabledTop(),
+                      widget.srv.inst?.control != null ? _controllerSettings(widget.srv.inst.control) : _disabledTop(),
                 )),
           child: Expanded(
-            child: widget.instance?.control != null
-                ? ControllerView(widget.instance.control, widget.instance.view)
+            child: widget.srv.inst?.control != null
+                ? ControllerView(widget.srv.inst.control, widget.srv.inst.view)
                 : _disabledBody(),
           ),
         )
@@ -115,7 +120,7 @@ class _RunningServerPage extends State<RunningServerPage> with SingleTickerProvi
 
   Widget _loggerSettings() {
     return ValueListenableBuilder(
-        valueListenable: widget.instance.view.style,
+        valueListenable: widget.srv.inst.view.style,
         builder: (context, _, __) => Column(
               mainAxisSize: MainAxisSize.min,
               children: <Widget>[_loggerSettings1(), _loggerSettings2(), Divider(), _loggerSettings3(), Divider()],
@@ -131,21 +136,21 @@ class _RunningServerPage extends State<RunningServerPage> with SingleTickerProvi
           valueListenable: widget.baseStyle,
           builder: (_, __, ___) => _loggerFlatButton(
               'Save',
-              widget.instance.view.style.isEqual(widget.baseStyle)
+              widget.srv.inst.view.style.isEqual(widget.baseStyle)
                   ? null
                   : () {
                       widget.baseStyle
-                        ..upgrade(widget.instance.view.style)
+                        ..upgrade(widget.srv.inst.view.style)
                         ..saveAll();
                     }),
         ),
         _loggerFlatButton(
             'Default',
-            widget.instance.view.style.isEqual(LogStyle())
+            widget.srv.inst.view.style.isEqual(LogStyle())
                 ? null
                 : () {
                     final def = LogStyle();
-                    widget.instance.view.style.upgrade(def);
+                    widget.srv.inst.view.style.upgrade(def);
                   })
       ],
     );
@@ -157,10 +162,10 @@ class _RunningServerPage extends State<RunningServerPage> with SingleTickerProvi
       verticalDirection: VerticalDirection.down,
       children: <Widget>[
         ValueListenableBuilder(
-          valueListenable: widget.server.states.unreadMessages,
+          valueListenable: widget.srv.states.unreadMessages,
           builder: (_, __, ___) => _loggerFlatButton(
             'Clear log',
-            widget.instance.log.isNotEmpty ? widget.instance.log.clear : null,
+            widget.srv.inst.log.isNotEmpty ? widget.srv.inst.log.clear : null,
           ),
         )
       ],
@@ -184,7 +189,7 @@ class _RunningServerPage extends State<RunningServerPage> with SingleTickerProvi
       return s[0].toUpperCase() + s.substring(1);
     }
 
-    final style = widget.instance.view.style;
+    final style = widget.srv.inst.view.style;
     return Row(children: [
       Expanded(
           child: PopupMenuButton(
@@ -255,9 +260,9 @@ class _RunningServerPage extends State<RunningServerPage> with SingleTickerProvi
 class LogListView extends StatefulWidget {
   final Log log;
   final InstanceViewState view;
-  final ServerData server;
+  final ValueNotifier<int> unreadMessages;
 
-  LogListView(this.log, this.view, this.server, {Key key}) : super(key: key);
+  LogListView(this.log, this.view, this.unreadMessages, {Key key}) : super(key: key);
 
   @override
   _LogListViewState createState() => _LogListViewState();
@@ -304,7 +309,7 @@ class _LogListViewState extends State<LogListView> with SingleTickerProviderStat
                 ValueListenableBuilder(
                     valueListenable: widget.view.style,
                     builder: (context, _, __) => ValueListenableBuilder(
-                        valueListenable: widget.server.states.unreadMessages,
+                        valueListenable: widget.unreadMessages,
                         builder: (context, _, __) => Container(
                               padding: EdgeInsets.symmetric(horizontal: 5),
                               child: ListView.builder(

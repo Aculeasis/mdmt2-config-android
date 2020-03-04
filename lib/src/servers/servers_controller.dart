@@ -2,190 +2,156 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:mdmt2_config/src/servers/server_data.dart';
+import 'package:mdmt2_config/src/settings/log_style.dart';
+import 'package:mdmt2_config/src/terminal/instance_view_state.dart';
+import 'package:mdmt2_config/src/terminal/log.dart';
+import 'package:mdmt2_config/src/terminal/terminal_client.dart';
+import 'package:mdmt2_config/src/terminal/terminal_control.dart';
+import 'package:mdmt2_config/src/terminal/terminal_instance.dart';
+import 'package:mdmt2_config/src/terminal/terminal_logger.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 part 'package:mdmt2_config/src/blocs/servers_controller.dart';
+part 'package:mdmt2_config/src/servers/servers_manager.dart';
 
-class ServersController extends _BLoC {
-  static final serverDataCount = '_srvs__count';
-  // Данные серверов, порядок важен
-  final _servers = <ServerData>[];
-  // Индексы, для быстрого поиска по имени.
-  final _indices = <String, int>{};
+class InstancesState {
+  int counts = 0, active = 0, closing = 0;
+}
 
-  int get length => _servers.length;
-  ServerData operator [](int index) => _servers[index];
-  Iterable<ServerData> get loop => _servers;
-  bool containsByObj(ServerData element) => contains(element.name);
-  bool contains(String name) => _indices.containsKey(name);
-  int indexOf(String name) => _indices[name] ?? -1;
-  bool isLoaded = false;
+class ServersController extends ServersManager {
+  final style = LogStyle()..loadAll();
+  final _state = InstancesState();
+  final StreamController<WorkingNotification> _startStopChange = StreamController<WorkingNotification>.broadcast();
+  final StreamController<InstancesState> _stateStream = StreamController<InstancesState>.broadcast();
 
   ServersController() {
-    _loadAll();
+    _startStopChange.stream.listen((event) {
+      event.server.states.notifyListeners();
+      if (event.signal == WorkingStatChange.connecting)
+        _state.active++;
+      else if (event.signal == WorkingStatChange.closing)
+        _state.closing++;
+      else if (event.signal == WorkingStatChange.disconnected ||
+          event.signal == WorkingStatChange.disconnectedOnError) {
+        _state.active--;
+        _state.closing--;
+        if (event.server.inst?.work == false) event.server.inst?.reconnect?.start();
+      } else
+        return;
+      _sendState();
+    });
   }
 
-  @override
   void dispose() {
+    _startStopChange.close();
+    _stateStream.close();
+    _clearAllInput();
+    style.dispose();
     super.dispose();
   }
 
-  void _removeAllInput() {
-    _removeAll();
-    if (_servers.isNotEmpty) {
-      _servers.clear();
-      notifyListeners();
+  void _sendState() {
+    _stateStream.add(_state);
+  }
+
+  Stream<InstancesState> get stateStream => _stateStream.stream;
+
+  void _clearAllInput() {
+    for (var server in loop) _clearInput(server);
+  }
+
+  void _stopAllInput() {
+    for (var server in loop) _stopInput(server);
+  }
+
+  bool _removeInstance(ServerData server, {bool callDispose = true, bool notify = true}) {
+    if (!_stopInput(server) || server.inst.lock > 0) return false;
+    final inst = server.inst;
+    server.inst = null;
+    final diff = (inst.logger != null ? 1 : 0) + (inst.control != null ? 1 : 0);
+    _state.counts -= diff;
+    if (callDispose) {
+      if (diff > 0 && notify) _sendState();
+      inst.dispose();
     }
-    _indices.clear();
+    if (notify) server.states.notifyListeners();
+    return true;
   }
 
-  void _upgradeInput(ServerData oldServer, ServerData server) {
-    final oldName = oldServer?.name;
-    final index = indexOf(oldName);
-    if (server == null || index == -1 || !_servers[index].upgrade(server)) return;
-    if (oldName != server.name) {
-      _indices.remove(oldName);
-      _rebuildIndex(start: index, length: index + 1);
-    }
-    _servers[index].saveServerData(index);
+  bool _stopInput(ServerData server) {
+    if (server.inst == null) return false;
+    server.inst.close();
+    return true;
   }
 
-  bool _addInput(ServerData server) {
-    if (server.name != '' && !contains(server.name)) {
-      _add(server);
-      _saveAll(start: _servers.length - 1);
-      notifyListeners();
-      return true;
-    }
-    return false;
+  void _clearInput(ServerData server) {
+    if (server.inst == null || server.inst.work) return;
+    _removeInstance(server);
   }
 
-  void _addAlwaysInput(ServerData server) {
-    if (!_addInput(server)) {
-      server.name = _newUniqueName(server.name);
-      _addInput(server);
-    }
-  }
-
-  void _add(ServerData server, {bool rebuild = true}) {
-    _servers.add(server);
-    if (rebuild) _rebuildIndex(start: _servers.length - 1);
-  }
-
-  void _removeInput(ServerData server) {
-    final name = server?.name;
-    final index = indexOf(name);
-    if (index > -1 && index < _servers.length) {
-      _removeByIndex(index);
-      if (_servers.isNotEmpty) {
-        removeServerData(_servers.length).then((_) => _saveAll(start: index));
-      } else
-        _removeAll(length: 1);
-      notifyListeners();
-    }
-  }
-
-  void _rebuildIndex({int start = 0, length}) {
-    length ??= _servers.length;
-    for (int i = start; i < length; i++) _indices[_servers[i].name] = i;
-    assert(_indices.length == _servers.length);
-  }
-
-  void _removeByIndex(int index, {bool rebuild = true}) {
-    _indices.remove(_servers[index].name);
-    _servers.removeAt(index);
-    if (rebuild) _rebuildIndex(start: index);
-  }
-
-  bool _insetIn(int index, ServerData server) {
-    if (!contains(server.name) && server.name != '') {
-      _insert(index, server);
-      _saveAll(start: index);
-      notifyListeners();
-      return true;
-    }
-    return false;
-  }
-
-  void _insertAlwaysInput(int index, ServerData server) {
-    if (!_insetIn(index, server)) {
-      server.name = _newUniqueName(server.name);
-      _insetIn(index, server);
-    }
-  }
-
-  String _newUniqueName(String oldName) {
-    for (int p = 1; p < 9999999; p++) {
-      final newName = '$oldName-$p';
-      if (!contains(newName)) return newName;
-    }
-    throw new Exception('NEVER!');
-  }
-
-  void _insert(int index, ServerData server, {bool rebuild = true}) {
-    _servers.insert(index, server);
-    if (rebuild) _rebuildIndex(start: index);
-  }
-
-  void _relocationInput(int oldIndex, newIndex) {
-    newIndex = newIndex >= _servers.length ? _servers.length - 1 : newIndex;
-    if (_servers.length < 2 || oldIndex >= _servers.length || oldIndex < 0 || newIndex < 0 || oldIndex == newIndex)
-      return;
-    final item = _servers[oldIndex];
-    // Не перестраиваем индексы, сделаем это потом
-    _removeByIndex(oldIndex, rebuild: false);
-    if (newIndex >= _servers.length)
-      _add(item, rebuild: false);
+  void _runInput(ServerData server, {returnServerCallback result}) {
+    if (server.inst != null)
+      _upgradeInstance(server);
     else
-      _insert(newIndex, item, rebuild: false);
+      _makeInstance(server);
+    _runInstance(server?.inst?.logger);
+    _runInstance(server?.inst?.control);
 
-    int start = newIndex, length = oldIndex + 1;
-    if (newIndex > oldIndex) {
-      start = oldIndex;
-      length = newIndex + 1;
-    }
-    debugPrint('* start=$start, length=$length');
-    _rebuildIndex(start: start, length: length);
-    _saveAll(start: start, length: length);
-    notifyListeners();
+    if (result != null && server.inst != null) result(server);
   }
 
-  _saveAll({int start = 0, length}) async {
-    final p = await SharedPreferences.getInstance();
-    if (length == null) {
-      length = _servers.length;
-      p.setInt(serverDataCount, length);
+  void _runInstance(TerminalClient inst) {
+    if (inst?.getStage == ConnectStage.wait) {
+      inst.sendRun();
     }
-    for (int i = start; i < length; i++) await _servers[i].saveServerData(i);
-    debugPrint(' * _saveAll ${length - start}');
   }
 
-  _loadAll() async {
-    final p = await SharedPreferences.getInstance();
-    final length = p.getInt(serverDataCount) ?? 0;
-    for (int i = 0; i < length; i++) {
-      ServerData value = await loadServerData(i);
-      if (value != null && !contains(value.name)) {
-        _servers.add(value);
-        _indices[value.name] = _servers.length - 1;
-      } else
-        debugPrint(' **** LoadAll error on load $i');
+  _makeInstance(ServerData server, {TerminalInstance instance}) {
+    instance ??= TerminalInstance(null, null, null, InstanceViewState(style.clone()), Reconnect(() => run(server)));
+    int incCounts = 0;
+    if (server.logger) {
+      instance.log ??= Log(instance.view.style, server.states);
+      if (instance.logger == null)
+        instance.logger = TerminalLogger(server, _startStopChange, instance.log);
+      else
+        instance.logger.setLog = instance.log;
+      incCounts++;
+    } else {
+      instance.logger?.dispose();
+      instance.logger = null;
+      instance.log?.dispose();
+      instance.log = null;
     }
-    if (_servers.length != length) _saveAll();
-    isLoaded = true;
-    notifyListeners();
-    debugPrint(' * LoadAll $length');
+    if (server.control) {
+      if (instance.control == null)
+        instance.control = TerminalControl(server, _startStopChange, instance.log, instance.view, instance.reconnect);
+      else
+        instance.control.setLog = instance.log;
+      incCounts++;
+    } else {
+      instance.control?.dispose();
+      instance.control = null;
+    }
+
+    if ((instance.logger ?? instance.control) != null) {
+      server.inst = instance;
+      server.states.notifyListeners();
+      _state.counts += incCounts;
+      if (incCounts > 0) _sendState();
+      server.states.notifyListeners();
+    } else
+      instance.dispose();
   }
 
-  _removeAll({int start = 0, length}) async {
-    final p = await SharedPreferences.getInstance();
-    length ??= _servers.length;
-    final newLength = _servers.length - (length - start);
-    for (int i = start; i < length; i++) removeServerData(i);
-    if (newLength > 0)
-      await p.setInt(serverDataCount, newLength);
-    else
-      await p.remove(serverDataCount);
-    debugPrint(' * _removeAll ${length - start}, new $newLength');
+  void _upgradeInstance(ServerData server) {
+    final instance = server.inst;
+    instance.reconnect.close();
+    if (instance.work) return debugPrint(' ***Still running ${server.name}');
+    if (((instance.logger != null) != server.logger || (instance.control != null) != server.control) &&
+        _removeInstance(server, callDispose: false)) {
+      debugPrint(' ***Re-make ${server.name}');
+      _makeInstance(server, instance: instance);
+    } else
+      debugPrint(' ***Nope ${server.name}');
   }
 }

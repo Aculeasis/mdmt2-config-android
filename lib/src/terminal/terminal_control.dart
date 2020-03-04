@@ -1,8 +1,9 @@
 import 'dart:async';
 
-import 'package:mdmt2_config/src/terminal/instances_controller.dart';
+import 'package:mdmt2_config/src/terminal/instance_view_state.dart';
 import 'package:mdmt2_config/src/terminal/log.dart';
 import 'package:mdmt2_config/src/terminal/terminal_client.dart';
+import 'package:mdmt2_config/src/terminal/terminal_instance.dart';
 
 class BackupLine {
   final String filename;

@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:mdmt2_config/src/dialogs.dart';
 import 'package:mdmt2_config/src/screens/running_server/backup_list.dart';
-import 'package:mdmt2_config/src/terminal/instances_controller.dart';
+import 'package:mdmt2_config/src/terminal/instance_view_state.dart';
 import 'package:mdmt2_config/src/terminal/terminal_client.dart';
 import 'package:mdmt2_config/src/terminal/terminal_control.dart';
 import 'package:mdmt2_config/src/utils.dart';
@@ -37,7 +37,6 @@ class _ControllerViewState extends State<ControllerView> {
     _subscriptions['toads'] = widget.control.streamToads.listen((event) => seeOkToast(context, event));
     _subscriptions['connected'] = widget.control.workerNotifyListen((event) {
       final isConnected = widget.control.getStage == ConnectStage.controller;
-      debugPrint(' isConnected=$isConnected');
       if (isConnected != _isConnected) {
         setState(() => _isConnected = isConnected);
       }
