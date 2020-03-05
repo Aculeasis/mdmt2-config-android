@@ -319,7 +319,8 @@ class _LogListViewState extends State<LogListView> with SingleTickerProviderStat
                         valueListenable: widget.unreadMessages,
                         builder: (context, _, __) => Container(
                               padding: EdgeInsets.symmetric(horizontal: 5),
-                              child: ListView.builder(
+                              // Ждем пока лог загрузится из файла
+                              child: !widget.log.isRestored? SizedBox() : ListView.builder(
                                   controller: _logScroll,
                                   reverse: true,
                                   shrinkWrap: true,

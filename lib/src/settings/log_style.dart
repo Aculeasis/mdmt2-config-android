@@ -93,18 +93,18 @@ class LogStyle extends ChangeValueNotifier {
 
   bool upgrade(LogStyle o) {
     if (isEqual(o)) return false;
-    _noNotify = true;
     _upgrade(o);
-    _noNotify = false;
     notifyListeners();
     return true;
   }
 
   void _upgrade(LogStyle o) {
+    _noNotify = true;
     lvl = o.lvl;
     fontSize = o.fontSize;
     timeFormat = o.timeFormat;
     callLvl = o.callLvl;
+    _noNotify = false;
   }
 
   @override
@@ -117,6 +117,18 @@ class LogStyle extends ChangeValueNotifier {
 
   LogStyle clone() => LogStyle().._upgrade(this);
 
+  void upgradeFromJson(String json) {
+    if (json == null) return;
+    LogStyle result;
+    try {
+      result = LogStyle.fromJson(jsonDecode(json));
+    } catch (e) {
+      debugPrint(' * upgradeFromJson error: $e');
+      return;
+    }
+    _upgrade(result);
+  }
+
   void loadAsBaseStyle() {
     SharedPreferences.getInstance().then((p) {
       final data = p.getString(_defaultLogStyle);
@@ -128,9 +140,7 @@ class LogStyle extends ChangeValueNotifier {
         debugPrint(' * loadAsBaseStyle error: $e');
         return;
       }
-      _noNotify = true;
       _upgrade(result);
-      _noNotify = false;
     });
   }
 

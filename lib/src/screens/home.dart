@@ -22,7 +22,29 @@ class MainServersPage extends StatelessWidget {
     ));
   }
 
+  void _pageReopener(BuildContext context, ServersController servers) {
+    final name = servers.page;
+    if (name == null) return;
+    final index = servers.indexOf(name);
+    if (index > -1 && index < servers.length) {
+      final server = servers[index];
+      WidgetsBinding.instance.addPostFrameCallback((_) => _openInstPage(context, server, servers));
+    }
+  }
+
+  void _openInstPage(BuildContext context, ServerData server, ServersController servers) {
+    if (server?.inst == null) return;
+    servers.open(server, true);
+    Navigator.of(context)
+        .push(MaterialPageRoute(builder: (context) => RunningServerPage(server, servers.style)))
+        .then((_) {
+      servers.open(server, false);
+      server.inst?.view?.unreadMessages?.messagesRead();
+    });
+  }
+
   Widget _buildServersView(BuildContext context, ServersController servers) {
+    _pageReopener(context, servers);
     return ReorderableListView(
       padding: EdgeInsets.only(top: 10),
       children: <Widget>[
@@ -52,15 +74,8 @@ class MainServersPage extends StatelessWidget {
   }
 
   Widget _buildRow(BuildContext context, ServersController servers, ServerData server) {
-    void view(ServerData _server) {
-      if (_server?.inst != null)
-        Navigator.of(context)
-            .push(MaterialPageRoute(builder: (context) => RunningServerPage(_server, servers.style)))
-            .then((value) => _server.inst?.view?.unreadMessages?.messagesRead());
-    }
-
     void openPageCallback(ServerData _server) {
-      if (Provider.of<MiscSettings>(context, listen: false).openOnRunning) view(_server);
+      if (Provider.of<MiscSettings>(context, listen: false).openOnRunning) _openInstPage(context, _server, servers);
     }
 
     final state = CollectActualServerState(server);
@@ -71,7 +86,7 @@ class MainServersPage extends StatelessWidget {
         maxLines: 1,
       ),
       onTap: () {
-        if (state.isControlled) view(server);
+        if (state.isControlled) _openInstPage(context, server, servers);
       },
       subtitle: Text(state.subtitle, maxLines: 2, overflow: TextOverflow.ellipsis),
       trailing: PopupMenuButton(
@@ -148,7 +163,7 @@ class MainServersPage extends StatelessWidget {
               debugPrint('-- Run ${server.name}');
               break;
             case ServerMenu.view:
-              view(server);
+              _openInstPage(context, server, servers);
               break;
             case ServerMenu.edit:
               serverFormDialog(context, server, servers.contains).then((value) => servers.upgrade(server, value));

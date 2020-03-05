@@ -16,7 +16,7 @@ abstract class ServersManager extends _BLoC {
   bool isLoaded = false;
 
   ServersManager() {
-    _loadAll();
+    _restore();
   }
 
   @override
@@ -167,6 +167,15 @@ abstract class ServersManager extends _BLoC {
     debugPrint(' * _saveAll ${length - start}');
   }
 
+  _restore() async {
+    await _loadAll();
+    await _greatResurrector();
+    isLoaded = true;
+    notifyListeners();
+  }
+
+  _greatResurrector();
+
   _loadAll() async {
     final p = await SharedPreferences.getInstance();
     final length = p.getInt(serverDataCount) ?? 0;
@@ -179,8 +188,6 @@ abstract class ServersManager extends _BLoC {
         debugPrint(' **** LoadAll error on load $i');
     }
     if (_servers.length != length) _saveAll();
-    isLoaded = true;
-    notifyListeners();
     debugPrint(' * LoadAll $length');
   }
 

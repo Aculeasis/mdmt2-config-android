@@ -1,6 +1,21 @@
 part of 'package:mdmt2_config/src/servers/servers_controller.dart';
 
-enum _tCMD { removeAll, upgrade, add, addAlways, remove, insertAlways, relocation, run, stop, clear, stopAll, clearAll }
+enum _tCMD {
+  removeAll,
+  upgrade,
+  add,
+  addAlways,
+  remove,
+  insertAlways,
+  relocation,
+  run,
+  stop,
+  clear,
+  stopAll,
+  clearAll,
+  iOpen,
+  iClose
+}
 
 class _CMD {
   final _tCMD cmd;
@@ -54,6 +69,10 @@ abstract class _BLoC extends ChangeNotifier {
         case _tCMD.run:
           _runInput(data.server1, result: data.serverCallback);
           break;
+        case _tCMD.iOpen:
+        case _tCMD.iClose:
+          _openInput(data.server1, data.cmd == _tCMD.iOpen);
+          break;
       }
     });
   }
@@ -73,6 +92,7 @@ abstract class _BLoC extends ChangeNotifier {
   bool _stopInput(ServerData server);
   void _clearInput(ServerData server);
   void _runInput(ServerData server, {returnServerCallback result});
+  void _openInput(ServerData server, bool openClose);
 
   void dispose() {
     __subscription.cancel();
@@ -98,6 +118,9 @@ abstract class _BLoC extends ChangeNotifier {
   void clear(ServerData server) => __stream.add(_CMD(_tCMD.clear, server1: server));
   void run(ServerData server, {returnServerCallback result}) =>
       __stream.add(_CMD(_tCMD.run, server1: server, serverCallback: result));
+
+  void open(ServerData server, bool openClose) =>
+      __stream.add(_CMD(openClose ? _tCMD.iOpen : _tCMD.iClose, server1: server));
 }
 
 typedef returnServerCallback = void Function(ServerData server);

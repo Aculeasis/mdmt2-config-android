@@ -4,12 +4,14 @@ import 'package:flutter/material.dart';
 import 'package:mdmt2_config/src/servers/server_data.dart';
 import 'package:mdmt2_config/src/settings/log_style.dart';
 import 'package:mdmt2_config/src/settings/misc_settings.dart';
+import 'package:mdmt2_config/src/terminal/file_logging.dart';
 import 'package:mdmt2_config/src/terminal/instance_view_state.dart';
 import 'package:mdmt2_config/src/terminal/log.dart';
 import 'package:mdmt2_config/src/terminal/terminal_client.dart';
 import 'package:mdmt2_config/src/terminal/terminal_control.dart';
 import 'package:mdmt2_config/src/terminal/terminal_instance.dart';
 import 'package:mdmt2_config/src/terminal/terminal_logger.dart';
+import 'package:native_state/native_state.dart';
 import 'package:rxdart/rxdart.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -21,6 +23,9 @@ class InstancesState {
 }
 
 class ServersController extends ServersManager {
+  static const _opened = 'inst_page';
+  bool _isAlreadyReopening = false;
+  SavedStateData _savedStateData;
   final style = LogStyle()..loadAsBaseStyle();
   final _state = InstancesState();
   final _startStopChange = StreamController<WorkingNotification>.broadcast();
@@ -51,6 +56,7 @@ class ServersController extends ServersManager {
     _stateStream.close();
     _clearAllInput();
     style.dispose();
+    _savedStateData.clear();
     super.dispose();
   }
 
@@ -102,17 +108,44 @@ class ServersController extends ServersManager {
     if (result != null && server.inst != null) result(server);
   }
 
+  void _openInput(ServerData server, bool openClose) {
+    if (openClose && server?.name != null)
+      _savedStateData.putString(_opened, server.name);
+    else
+      _savedStateData.remove(_opened);
+  }
+
+  String get page {
+    if (_isAlreadyReopening) return null;
+    _isAlreadyReopening = true;
+    return _savedStateData.getString(_opened);
+  }
+
   void _runInstance(TerminalClient inst) {
     if (inst?.getStage == ConnectStage.wait) {
       inst.sendRun();
     }
   }
 
-  _makeInstance(ServerData server, {TerminalInstance instance}) {
-    instance ??= TerminalInstance(null, null, null, InstanceViewState(style.clone()), Reconnect(() => run(server)));
+  _makeInstance(ServerData server, {TerminalInstance instance, bool restoreView = false, bool restoreLog = false}) {
+    SavedStateData _getLogState() {
+      final _child = _savedStateData.child('log_${server.uuid}');
+      _child.putString('name', server.uuid);
+      return _child;
+    }
+
+    final toSave = MiscSettings().saveAppState;
+    instance ??= TerminalInstance(
+        null,
+        null,
+        null,
+        InstanceViewState(style.clone(), toSave ? _savedStateData.child('view_${server.uuid}') : null,
+            restore: restoreView),
+        Reconnect(() => run(server)));
     int incCounts = 0;
     if (server.logger) {
-      instance.log ??= Log(instance.view.style, instance.view.unreadMessages);
+      instance.log ??=
+          Log(instance.view.style, instance.view.unreadMessages, toSave ? _getLogState() : null, restoreLog);
       if (instance.logger == null)
         instance.logger = TerminalLogger(server, _startStopChange, instance.log);
       else
@@ -154,5 +187,35 @@ class ServersController extends ServersManager {
       _makeInstance(server, instance: instance);
     } else
       debugPrint(' ***Nope ${server.name}');
+  }
+
+  @override
+  _greatResurrector() async {
+    _savedStateData = await SavedStateData.restore();
+    await LogsBox().filling();
+    final saveAppState = MiscSettings().saveAppState;
+    if (length == 0 || !saveAppState) {
+      LogsBox().dispose();
+      await _savedStateData.clear();
+      return;
+    }
+
+    for (var server in _servers) {
+      final viewChild = _savedStateData.child('view_${server.uuid}');
+      if (viewChild.getBool('flag') == true) {
+        debugPrint(' * Restoring ${server.name} = ${server.uuid}');
+        final logChild = _savedStateData.child('log_${server.uuid}');
+        bool restoreLog = false;
+        if (logChild.getBool('flag') == true) {
+          restoreLog = true;
+        } else {
+          logChild.clear();
+        }
+        _makeInstance(server, restoreView: true, restoreLog: restoreLog);
+      } else {
+        viewChild.clear();
+      }
+    }
+    LogsBox().dispose();
   }
 }

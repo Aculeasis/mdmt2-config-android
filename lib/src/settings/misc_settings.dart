@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-class _Keys {
+class _N {
   static const openOnRunning = 'ms_oor';
   static const autoReconnectAfterReboot = 'ms_arar';
+  static const saveAppState = 'ms_sas';
 }
 
 class MiscSettings {
@@ -11,6 +12,9 @@ class MiscSettings {
   bool _openOnRunning = false;
   // Переподключаться после ребута, сек. 0 - отключено.
   int _autoReconnectAfterReboot = 10;
+  // Сохранять состояния инстансов на случай OOM.
+  // Для применения нужно пересоздать инсты, логи хранятся в файлах (/cache/log/)
+  bool _saveAppState = true;
   // Задержка всяких обновлений для уменьшения частоты перерисовки виджетов
   final throttleTime = Duration(milliseconds: 60);
 
@@ -22,19 +26,27 @@ class MiscSettings {
     _loadAll();
   }
 
-  get autoReconnectAfterReboot => _autoReconnectAfterReboot;
+  int get autoReconnectAfterReboot => _autoReconnectAfterReboot;
   set autoReconnectAfterReboot(int value) {
     if (value != _autoReconnectAfterReboot) {
       _autoReconnectAfterReboot = value;
-      _saveInt(_Keys.autoReconnectAfterReboot, _autoReconnectAfterReboot);
+      _saveInt(_N.autoReconnectAfterReboot, _autoReconnectAfterReboot);
     }
   }
 
-  get openOnRunning => _openOnRunning;
+  bool get openOnRunning => _openOnRunning;
   set openOnRunning(bool value) {
     if (value != _openOnRunning) {
       _openOnRunning = value;
-      _saveBool(_Keys.openOnRunning, _openOnRunning);
+      _saveBool(_N.openOnRunning, _openOnRunning);
+    }
+  }
+
+  bool get saveAppState => _saveAppState;
+  set saveAppState(bool value) {
+    if (value != _saveAppState) {
+      _saveAppState = value;
+      _saveBool(_N.saveAppState, _saveAppState);
     }
   }
 
@@ -50,7 +62,8 @@ class MiscSettings {
 
   _loadAll() async {
     final p = await SharedPreferences.getInstance();
-    _openOnRunning = p.getBool(_Keys.openOnRunning) ?? _openOnRunning;
-    _autoReconnectAfterReboot = p.getInt(_Keys.autoReconnectAfterReboot) ?? _autoReconnectAfterReboot;
+    _openOnRunning = p.getBool(_N.openOnRunning) ?? _openOnRunning;
+    _autoReconnectAfterReboot = p.getInt(_N.autoReconnectAfterReboot) ?? _autoReconnectAfterReboot;
+    _saveAppState = p.getBool(_N.saveAppState) ?? _saveAppState;
   }
 }

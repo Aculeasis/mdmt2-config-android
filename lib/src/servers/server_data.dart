@@ -1,9 +1,12 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:mdmt2_config/src/terminal/terminal_instance.dart';
 import 'package:mdmt2_config/src/misc.dart';
+import 'package:mdmt2_config/src/terminal/terminal_instance.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:uuid/uuid.dart' as _uuid;
+
+final _uuidGen = _uuid.Uuid();
 
 class _Name {
   static const _prefix = 'srv_d';
@@ -11,6 +14,7 @@ class _Name {
 }
 
 class _N {
+  static const uuid = '0';
   static const name = '1';
   static const token = '2';
   static const wsToken = '3';
@@ -43,6 +47,7 @@ Future<ServerData> loadServerData(int index) async {
     debugPrint(' * Wrong ServerData $index');
     return null;
   }
+  if (result.saveMe) result.saveServerData(index);
   return result;
 }
 
@@ -53,6 +58,8 @@ Future<void> removeServerData(int index) async {
 }
 
 class ServerData extends ChangeThrottledValueNotifier {
+  bool saveMe = false;
+  final String uuid;
   TerminalInstance inst;
   String name, token, wsToken, ip;
   int _port;
@@ -65,21 +72,26 @@ class ServerData extends ChangeThrottledValueNotifier {
       int port = 7999,
       this.logger = true,
       this.control = false,
-      this.totpSalt = false}) {
+      this.totpSalt = false})
+      : uuid = _uuidGen.v4() {
     this.port = port;
   }
 
   ServerData.fromJson(Map<String, dynamic> json)
-      : name = json[_N.name],
+      : uuid = json[_N.uuid] ?? _uuidGen.v4(),
+        name = json[_N.name],
         token = json[_N.token],
         wsToken = json[_N.wsToken],
         ip = json[_N.ip],
         _port = json[_N.port],
         logger = json[_N.logger],
         control = json[_N.control],
-        totpSalt = json[_N.totpSalt];
+        totpSalt = json[_N.totpSalt] {
+    if (json[_N.uuid] == null) saveMe = true;
+  }
 
   Map<String, dynamic> toJson() => {
+        _N.uuid: uuid,
         _N.name: name,
         _N.token: token,
         _N.wsToken: wsToken,

@@ -34,14 +34,20 @@ class SettingsPage extends StatelessWidget {
                         subtitle: Text(settings.autoReconnectAfterReboot > 0
                             ? 'after ${settings.autoReconnectAfterReboot} seconds'
                             : 'disabled'),
-                        onTap: () => uIntDialog(context, settings.autoReconnectAfterReboot, 'Delay [0: disabled]')
-                            .then((value) {
+                        onTap: () =>
+                            uIntDialog(context, settings.autoReconnectAfterReboot, 'Delay [0: disabled]').then((value) {
                           if (value != null) {
                             settings.autoReconnectAfterReboot = value;
                             reconnectTile.notifyListeners();
                           }
                         }),
                       )),
+              switchListTileTap(
+                  activeColor: Theme.of(context).accentColor,
+                  title: Text('Restore APP state after OOM'),
+                  subtitle: Text('WARNING! Stop and clear all Servers after change this setting'),
+                  value: settings.saveAppState,
+                  onChanged: (newVal) => settings.saveAppState = newVal),
             ],
           )),
     );
