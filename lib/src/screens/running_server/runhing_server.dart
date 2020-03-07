@@ -12,8 +12,9 @@ import 'package:mdmt2_config/src/terminal/terminal_control.dart';
 class RunningServerPage extends StatefulWidget {
   final ServerData srv;
   final LogStyle baseStyle;
+  final Function runCallback;
 
-  RunningServerPage(this.srv, this.baseStyle, {Key key}) : super(key: key);
+  RunningServerPage(this.srv, this.baseStyle, this.runCallback, {Key key}) : super(key: key);
 
   @override
   _RunningServerPage createState() => _RunningServerPage();
@@ -49,6 +50,8 @@ class _RunningServerPage extends State<RunningServerPage> with SingleTickerProvi
       appBar: PreferredSize(
           preferredSize: Size.fromHeight(kToolbarHeight),
           child: AppBar(
+            titleSpacing: 0,
+            title: _title(),
             actions: _actions(),
             bottom: TabBar(controller: _tabController, tabs: <Widget>[
               Text('Log'),
@@ -60,6 +63,17 @@ class _RunningServerPage extends State<RunningServerPage> with SingleTickerProvi
         _twoTab(context),
       ]),
     );
+  }
+
+  Widget _title() {
+    return ValueListenableBuilder(
+        valueListenable: widget.srv,
+        builder: (_, __, ___) {
+          final mayBe = widget.srv.inst != null &&
+              !widget.srv.inst.reconnect.isRun &&
+              (widget.srv.inst.loggerWait || widget.srv.inst.controlWait);
+          return IconButton(icon: Icon(Icons.settings_backup_restore), onPressed: mayBe ? widget.runCallback : null);
+        });
   }
 
   _actions() {

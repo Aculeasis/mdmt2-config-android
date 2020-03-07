@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/cupertino.dart' as cupertino;
 import 'package:flutter/material.dart';
 import 'package:mdmt2_config/src/dialogs.dart';
+import 'package:mdmt2_config/src/native_states.dart';
 import 'package:mdmt2_config/src/screens/running_server/runhing_server.dart';
 import 'package:mdmt2_config/src/screens/settings.dart';
 import 'package:mdmt2_config/src/servers/server_data.dart';
@@ -12,7 +15,7 @@ import 'package:provider/provider.dart';
 enum ServerMenu { connect, edit, remove, view, stop, clone, clear }
 enum MainMenu { addServer, removeAll, settings, About, stopAll, clearAll }
 
-class MainServersPage extends StatelessWidget {
+class HomePage extends StatelessWidget {
   void _undoToast(BuildContext context, String msg, Function() undo) {
     final scaffold = Scaffold.of(context);
     scaffold.hideCurrentSnackBar();
@@ -22,29 +25,38 @@ class MainServersPage extends StatelessWidget {
     ));
   }
 
-  void _pageReopener(BuildContext context, ServersController servers) {
-    final name = servers.page;
-    if (name == null) return;
-    final index = servers.indexOf(name);
-    if (index > -1 && index < servers.length) {
-      final server = servers[index];
-      WidgetsBinding.instance.addPostFrameCallback((_) => _openInstPage(context, server, servers));
+  void _pageRestore(BuildContext context, ServersController servers) {
+    final page = Provider.of<NativeStates>(context, listen: false).pageRestore();
+    if (page.isEmpty) return;
+    Function(void) target;
+    if (page.type == 'add_server') {
+      target = (_) => _openAddServerDialog(context, servers);
+    } else if (page.type == 'edit_server') {
+      target = (_) => _openEditServerDialog(context, servers.byName(page.name), servers);
     }
+    if (target != null) WidgetsBinding.instance.addPostFrameCallback(target);
   }
 
-  void _openInstPage(BuildContext context, ServerData server, ServersController servers) {
-    if (server?.inst == null) return;
-    servers.open(server, true);
-    Navigator.of(context)
-        .push(MaterialPageRoute(builder: (context) => RunningServerPage(server, servers.style)))
-        .then((_) {
-      servers.open(server, false);
-      server.inst?.view?.unreadMessages?.messagesRead();
-    });
+  Future<void> _openAddServerDialog(BuildContext context, ServersController servers) async {
+    final states = Provider.of<NativeStates>(context, listen: false);
+    states.pageOpen(RootPage('add_server', 'add_server'));
+    final value =
+        await serverFormDialog(context, ServerData(), servers.contains, states.child('_add_server', bySetting: true));
+    states.pageClose();
+    if (value != null) servers.add(value);
+  }
+
+  Future<void> _openEditServerDialog(BuildContext context, ServerData server, ServersController servers) async {
+    if (server == null) return;
+    final states = Provider.of<NativeStates>(context, listen: false);
+    states.pageOpen(RootPage('edit_server', server.name));
+    final value =
+        await serverFormDialog(context, server, servers.contains, states.child('_edit_server', bySetting: true));
+    states.pageClose();
+    if (value != null) servers.upgrade(server, value);
   }
 
   Widget _buildServersView(BuildContext context, ServersController servers) {
-    _pageReopener(context, servers);
     return ReorderableListView(
       padding: EdgeInsets.only(top: 10),
       children: <Widget>[
@@ -63,7 +75,7 @@ class MainServersPage extends StatelessWidget {
               'Add new server',
               textAlign: TextAlign.center,
             ),
-            onTap: () => _addServer(context, servers),
+            onTap: () => _openAddServerDialog(context, servers),
           )
       ],
       onReorder: (oldIndex, newIndex) {
@@ -75,7 +87,7 @@ class MainServersPage extends StatelessWidget {
 
   Widget _buildRow(BuildContext context, ServersController servers, ServerData server) {
     void openPageCallback(ServerData _server) {
-      if (Provider.of<MiscSettings>(context, listen: false).openOnRunning) _openInstPage(context, _server, servers);
+      if (Provider.of<MiscSettings>(context, listen: false).openOnRunning) _openInstancePage(context, _server, servers);
     }
 
     final state = CollectActualServerState(server);
@@ -86,7 +98,7 @@ class MainServersPage extends StatelessWidget {
         maxLines: 1,
       ),
       onTap: () {
-        if (state.isControlled) _openInstPage(context, server, servers);
+        if (state.isControlled) _openInstancePage(context, server, servers);
       },
       subtitle: Text(state.subtitle, maxLines: 2, overflow: TextOverflow.ellipsis),
       trailing: PopupMenuButton(
@@ -163,10 +175,10 @@ class MainServersPage extends StatelessWidget {
               debugPrint('-- Run ${server.name}');
               break;
             case ServerMenu.view:
-              _openInstPage(context, server, servers);
+              _openInstancePage(context, server, servers);
               break;
             case ServerMenu.edit:
-              serverFormDialog(context, server, servers.contains).then((value) => servers.upgrade(server, value));
+              _openEditServerDialog(context, server, servers);
               break;
             case ServerMenu.remove:
               final index = servers.indexOf(server.name);
@@ -291,7 +303,7 @@ class MainServersPage extends StatelessWidget {
       onSelected: (value) {
         switch (value) {
           case MainMenu.addServer:
-            _addServer(context, servers);
+            _openAddServerDialog(context, servers);
             break;
           case MainMenu.removeAll:
             dialogYesNo(context, 'Really?', 'Remove all servers entry? This action cannot be undone.', 'Remove all',
@@ -303,9 +315,7 @@ class MainServersPage extends StatelessWidget {
             });
             break;
           case MainMenu.settings:
-            //Navigator.
-            Navigator.of(context).push(cupertino.CupertinoPageRoute(builder: (context) => SettingsPage()));
-            // settings
+            _openSettingsPage(context);
             break;
           case MainMenu.About:
             showAbout(context);
@@ -329,11 +339,6 @@ class MainServersPage extends StatelessWidget {
         style: TextStyle(fontSize: 16, fontWeight: FontWeight.w300));
   }
 
-  _addServer(BuildContext context, ServersController servers) =>
-      serverFormDialog(context, ServerData(), servers.contains).then((value) {
-        if (value != null) servers.add(value);
-      });
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -344,21 +349,81 @@ class MainServersPage extends StatelessWidget {
             builder: (_, value) => (value?.data?.counts ?? 0) != 0 ? _title(value.data) : SizedBox()),
         actions: <Widget>[
           Consumer<ServersController>(
-            builder: (context, servers, child) => servers.isLoaded
+            builder: (context, servers, _) => servers.isLoaded
                 ? StreamBuilder<InstancesState>(
                     initialData: InstancesState(),
                     stream: servers.stateStream,
-                    builder: (_, val) => val.data != null ? _mainPopupMenu(context, servers, val.data) : child)
-                : child,
-            child: Container(),
+                    builder: (_, val) => val.data != null ? _mainPopupMenu(context, servers, val.data) : Container())
+                : Container(),
           )
         ],
       ),
-      body: SafeArea(
-          child: Consumer<ServersController>(
-        builder: (context, servers, child) => servers.isLoaded ? _buildServersView(context, servers) : child,
-        child: Container(),
+      body: SafeArea(child: Consumer<ServersController>(
+        builder: (context, servers, _) {
+          if (!servers.isLoaded) return Container();
+          _pageRestore(context, servers);
+          return _buildServersView(context, servers);
+        },
       )),
     );
   }
+}
+
+class FakeHomePage extends StatefulWidget {
+  final RootPage _page;
+  final Function _selfDestroy;
+
+  FakeHomePage(this._page, this._selfDestroy, {Key key}) : super(key: key);
+  @override
+  _FakeHomePageState createState() => _FakeHomePageState();
+}
+
+class _FakeHomePageState extends State<FakeHomePage> {
+  bool _onlyOne = true;
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<ServersController>(
+      builder: (context, servers, _) => servers.isLoaded && _onlyOne ? _body(context, servers) : Container(),
+    );
+  }
+
+  Widget _body(BuildContext context, ServersController servers) {
+    _onlyOne = false;
+    Future<void> Function() open;
+    if (widget._page.type == 'settings') {
+      open = () async => await _openSettingsPage(context);
+    } else if (widget._page.type == 'instance') {
+      open = () async => await _openInstancePage(context, servers.byName(widget._page.name), servers);
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (open != null)
+        open().then((_) {
+          widget._selfDestroy();
+        }).catchError((e) {
+          widget._selfDestroy();
+          throw e;
+        });
+      else
+        widget._selfDestroy();
+    });
+    return Container();
+  }
+}
+
+Future<void> _openInstancePage(BuildContext context, ServerData server, ServersController servers) async {
+  if (server?.inst == null) return;
+  final states = Provider.of<NativeStates>(context, listen: false);
+  states.pageOpen(RootPage('instance', server.name));
+  await Navigator.of(context)
+      .push(MaterialPageRoute(builder: (_) => RunningServerPage(server, servers.style, () => servers.run(server))));
+  states.pageClose();
+  server.inst?.view?.unreadMessages?.messagesRead();
+}
+
+Future<void> _openSettingsPage(BuildContext context) async {
+  final states = Provider.of<NativeStates>(context, listen: false);
+  states.pageOpen(RootPage('settings', 'settings'));
+  await Navigator.of(context).push(cupertino.CupertinoPageRoute(builder: (_) => SettingsPage()));
+  states.pageClose();
 }

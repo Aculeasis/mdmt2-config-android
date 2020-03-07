@@ -7,7 +7,8 @@ class _N {
   static const saveAppState = 'ms_sas';
 }
 
-class MiscSettings {
+class MiscSettings extends ChangeNotifier{
+  bool isLoaded = false;
   // Открывать запущенный сервер
   bool _openOnRunning = false;
   // Переподключаться после ребута, сек. 0 - отключено.
@@ -65,5 +66,7 @@ class MiscSettings {
     _openOnRunning = p.getBool(_N.openOnRunning) ?? _openOnRunning;
     _autoReconnectAfterReboot = p.getInt(_N.autoReconnectAfterReboot) ?? _autoReconnectAfterReboot;
     _saveAppState = p.getBool(_N.saveAppState) ?? _saveAppState;
+    isLoaded = true;
+    notifyListeners();
   }
 }

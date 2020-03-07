@@ -4,34 +4,46 @@ import 'package:mdmt2_config/src/screens/finder_page.dart';
 import 'package:mdmt2_config/src/servers/server_data.dart';
 import 'package:mdmt2_config/src/upnp/terminal_info.dart';
 import 'package:mdmt2_config/src/widgets.dart';
+import 'package:native_state/native_state.dart';
 import 'package:package_info/package_info.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:validators/validators.dart';
 
 Future<ServerData> serverFormDialog(
-  BuildContext context,
-  ServerData _srv,
-  Function(String name) contains,
-) async {
-  final Map<String, TextEditingController> controllers = {
-    'name': TextEditingController(text: _srv.name),
-    'ip': TextEditingController(text: _srv.ip),
-    'port': TextEditingController(text: _srv.port.toString()),
-    'token': TextEditingController(text: _srv.token),
-    'ws_token': TextEditingController(text: _srv.wsToken),
-  };
-  bool logger = _srv.logger, control = _srv.control, totpSalt = _srv.totpSalt;
+    BuildContext context, ServerData _srv, Function(String name) contains, SavedStateData saved) async {
   final key = GlobalKey<FormState>();
+  final ctlStr = {
+    'name': _srv.name,
+    'ip': _srv.ip,
+    'port': _srv.port.toString(),
+    'token': _srv.token,
+    'wsToken': _srv.wsToken
+  }.map((key, value) => MapEntry(key, TextEditingController(text: saved?.getString(key) ?? value)));
+  final ctlBool = {
+    'logger': _srv.logger,
+    'control': _srv.control,
+    'totpSalt': _srv.totpSalt,
+  }.map((key, value) => MapEntry(key, ValueNotifier<bool>(saved?.getBool(key) ?? value)));
+  if (saved != null) {
+    for (var key in ctlStr.keys) ctlStr[key].addListener(() => saved.putString(key, ctlStr[key].text));
+    for (var key in ctlBool.keys) ctlBool[key].addListener(() => saved.putBool(key, ctlBool[key].value));
+  }
+
   void finder() {
+    saved?.putBool('_finder', true);
     Navigator.of(context).push(MaterialPageRoute(builder: (context) => FinderPage())).then((value) {
+      saved?.remove('_finder');
       if (value != null && value is TerminalInfo) {
-        controllers['ip'].text = value.ip;
-        controllers['port'].text = value.port.toString();
-        if (controllers['name'].text == '') controllers['name'].text = '${value.ip}:${value.port}';
+        ctlStr['ip'].text = value.ip;
+        ctlStr['port'].text = value.port.toString();
+        if (ctlStr['name'].text == '') ctlStr['name'].text = '${value.ip}:${value.port}';
       }
     });
   }
 
+  if (saved?.getBool('_finder') == true) {
+    WidgetsBinding.instance.addPostFrameCallback((_) => finder());
+  }
   return showDialog<ServerData>(
       context: context,
       builder: (context) => AlertDialog(
@@ -48,21 +60,25 @@ Future<ServerData> serverFormDialog(
                 ),
               RaisedButton(
                 child: Text('Cancel'),
-                onPressed: () => Navigator.of(context).pop(),
+                onPressed: () {
+                  saved?.clear();
+                  Navigator.of(context).pop();
+                },
               ),
               RaisedButton(
                 child: Text('Save'),
                 onPressed: () {
                   if (key.currentState.validate()) {
+                    saved?.clear();
                     Navigator.of(context).pop(ServerData(
-                        name: controllers['name'].text,
-                        ip: controllers['ip'].text,
-                        port: int.parse(controllers['port'].text),
-                        token: controllers['token'].text,
-                        wsToken: controllers['ws_token'].text,
-                        logger: logger,
-                        control: control,
-                        totpSalt: totpSalt));
+                        name: ctlStr['name'].text,
+                        ip: ctlStr['ip'].text,
+                        port: int.parse(ctlStr['port'].text),
+                        token: ctlStr['token'].text,
+                        wsToken: ctlStr['wsToken'].text,
+                        logger: ctlBool['logger'].value,
+                        control: ctlBool['control'].value,
+                        totpSalt: ctlBool['totpSalt'].value));
                   }
                 },
               ),
@@ -74,7 +90,7 @@ Future<ServerData> serverFormDialog(
                   children: <Widget>[
                     TextFormField(
                         decoration: InputDecoration(labelText: 'Name'),
-                        controller: controllers['name'],
+                        controller: ctlStr['name'],
                         autovalidate: true,
                         maxLength: 20,
                         validator: (v) {
@@ -88,7 +104,7 @@ Future<ServerData> serverFormDialog(
                       textInputAction: TextInputAction.done,
                       keyboardType: TextInputType.numberWithOptions(decimal: true),
                       decoration: InputDecoration(labelText: 'IP'),
-                      controller: controllers['ip'],
+                      controller: ctlStr['ip'],
                       autovalidate: true,
                       validator: (v) {
                         if (v.isEmpty) return 'Enter server IP';
@@ -100,7 +116,7 @@ Future<ServerData> serverFormDialog(
                         textInputAction: TextInputAction.done,
                         keyboardType: TextInputType.numberWithOptions(decimal: true),
                         decoration: InputDecoration(labelText: 'Port'),
-                        controller: controllers['port'],
+                        controller: ctlStr['port'],
                         autovalidate: true,
                         validator: (v) {
                           final port = int.tryParse(v);
@@ -111,31 +127,28 @@ Future<ServerData> serverFormDialog(
                     textFormFieldPassword(
                       context,
                       decoration: InputDecoration(labelText: 'Token'),
-                      controller: controllers['token'],
+                      controller: ctlStr['token'],
                       isVisible: false,
                     ),
                     switchListTileTap(
-                        activeColor: Theme.of(context).accentColor,
                         contentPadding: EdgeInsets.zero,
                         title: Text('Log'),
-                        value: logger,
-                        onChanged: (newVal) => logger = newVal),
+                        value: ctlBool['logger'].value,
+                        onChanged: (newVal) => ctlBool['logger'].value = newVal),
                     switchListTileTap(
-                        activeColor: Theme.of(context).accentColor,
                         contentPadding: EdgeInsets.zero,
                         title: Text('Control'),
-                        value: control,
-                        onChanged: (newVal) => control = newVal),
+                        value: ctlBool['control'].value,
+                        onChanged: (newVal) => ctlBool['control'].value = newVal),
                     switchListTileTap(
-                        activeColor: Theme.of(context).accentColor,
                         contentPadding: EdgeInsets.zero,
                         title: Text('TOTP Salt'),
-                        value: totpSalt,
-                        onChanged: (newVal) => totpSalt = newVal),
+                        value: ctlBool['totpSalt'].value,
+                        onChanged: (newVal) => ctlBool['totpSalt'].value = newVal),
                     textFormFieldPassword(
                       context,
                       decoration: InputDecoration(labelText: 'ws_token'),
-                      controller: controllers['ws_token'],
+                      controller: ctlStr['wsToken'],
                     ),
                   ],
                 ),

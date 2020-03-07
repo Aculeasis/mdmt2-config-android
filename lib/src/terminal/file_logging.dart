@@ -32,7 +32,7 @@ class LogsBox {
   FileLog getFileLog(String name) {
     if (name == null || name == '' || _path == null) return null;
     final strPath = '$_path/$name';
-    if (_owned != null && _owned.contains(strPath)) {
+    if (_owned?.contains(strPath) == true) {
       debugPrint('*** Error file $strPath already used ***');
       return null;
     }
@@ -42,10 +42,10 @@ class LogsBox {
     return FileLog(file);
   }
 
-  void dispose() {
+  dispose() async {
     for (var target in files.values) {
       try {
-        target.deleteSync();
+        target.delete();
       } catch (e) {
         debugPrint('*** Error deleting ${target.path}: $e');
         continue;

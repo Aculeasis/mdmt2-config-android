@@ -2,6 +2,7 @@ part of 'package:mdmt2_config/src/servers/servers_controller.dart';
 
 abstract class ServersManager extends _BLoC {
   static final serverDataCount = '_srvs__count';
+  bool isLoaded = false;
   // Данные серверов, порядок важен
   final _servers = <ServerData>[];
   // Индексы, для быстрого поиска по имени.
@@ -13,7 +14,10 @@ abstract class ServersManager extends _BLoC {
   bool containsByObj(ServerData element) => contains(element.name);
   bool contains(String name) => _indices.containsKey(name);
   int indexOf(String name) => _indices[name] ?? -1;
-  bool isLoaded = false;
+  ServerData byName(String name) {
+    final index = indexOf(name);
+    return index != -1 ? _servers[index] : null;
+  }
 
   ServersManager() {
     _restore();
@@ -115,6 +119,11 @@ abstract class ServersManager extends _BLoC {
   }
 
   void _insertAlwaysInput(int index, ServerData server) {
+    if (index < 0) {
+      index = 0;
+    } else if (index > length) {
+      index = length;
+    }
     if (!_insetIn(index, server)) {
       server.name = _newUniqueName(server.name);
       _insetIn(index, server);

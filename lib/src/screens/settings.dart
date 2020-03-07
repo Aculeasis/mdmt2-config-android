@@ -10,7 +10,7 @@ class SettingsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final reconnectTile = ChangeValueNotifier();
-    final settings = Provider.of<MiscSettings>(context, listen: false);
+    final misc = Provider.of<MiscSettings>(context, listen: false);
     return Scaffold(
       appBar: AppBar(
         title: Text('Settings'),
@@ -22,32 +22,30 @@ class SettingsPage extends StatelessWidget {
             children: <Widget>[
               _themeSelector(context),
               switchListTileTap(
-                  activeColor: Theme.of(context).accentColor,
                   title: Text('Open at Run'),
                   subtitle: Text('Auto opening the server page at run'),
-                  value: settings.openOnRunning,
-                  onChanged: (newVal) => settings.openOnRunning = newVal),
+                  value: misc.openOnRunning,
+                  onChanged: (newVal) => misc.openOnRunning = newVal),
               ValueListenableBuilder(
                   valueListenable: reconnectTile,
                   builder: (_, __, ___) => ListTile(
                         title: Text('Reconnect after reboot'),
-                        subtitle: Text(settings.autoReconnectAfterReboot > 0
-                            ? 'after ${settings.autoReconnectAfterReboot} seconds'
+                        subtitle: Text(misc.autoReconnectAfterReboot > 0
+                            ? 'after ${misc.autoReconnectAfterReboot} seconds'
                             : 'disabled'),
                         onTap: () =>
-                            uIntDialog(context, settings.autoReconnectAfterReboot, 'Delay [0: disabled]').then((value) {
+                            uIntDialog(context, misc.autoReconnectAfterReboot, 'Delay [0: disabled]').then((value) {
                           if (value != null) {
-                            settings.autoReconnectAfterReboot = value;
+                            misc.autoReconnectAfterReboot = value;
                             reconnectTile.notifyListeners();
                           }
                         }),
                       )),
               switchListTileTap(
-                  activeColor: Theme.of(context).accentColor,
                   title: Text('Restore APP state after OOM'),
-                  subtitle: Text('WARNING! Stop and clear all Servers after change this setting'),
-                  value: settings.saveAppState,
-                  onChanged: (newVal) => settings.saveAppState = newVal),
+                  subtitle: Text('Clear all instances after change this setting'),
+                  value: misc.saveAppState,
+                  onChanged: (newVal) => misc.saveAppState = newVal),
             ],
           )),
     );

@@ -23,16 +23,14 @@ class InstancesState {
 }
 
 class ServersController extends ServersManager {
-  static const _opened = 'inst_page';
-  bool _isAlreadyReopening = false;
-  SavedStateData _savedStateData;
+  final SavedStateData _saved;
   final style = LogStyle()..loadAsBaseStyle();
   final _state = InstancesState();
   final _startStopChange = StreamController<WorkingNotification>.broadcast();
   final _stateStream = BehaviorSubject<InstancesState>();
   Stream<InstancesState> stateStream;
 
-  ServersController() {
+  ServersController(this._saved) {
     stateStream = _stateStream.throttleTime(MiscSettings().throttleTime, trailing: true);
     _startStopChange.stream.listen((event) {
       event.server.notifyListeners();
@@ -56,7 +54,7 @@ class ServersController extends ServersManager {
     _stateStream.close();
     _clearAllInput();
     style.dispose();
-    _savedStateData.clear();
+    _saved.clear();
     super.dispose();
   }
 
@@ -108,19 +106,6 @@ class ServersController extends ServersManager {
     if (result != null && server.inst != null) result(server);
   }
 
-  void _openInput(ServerData server, bool openClose) {
-    if (openClose && server?.name != null)
-      _savedStateData.putString(_opened, server.name);
-    else
-      _savedStateData.remove(_opened);
-  }
-
-  String get page {
-    if (_isAlreadyReopening) return null;
-    _isAlreadyReopening = true;
-    return _savedStateData.getString(_opened);
-  }
-
   void _runInstance(TerminalClient inst) {
     if (inst?.getStage == ConnectStage.wait) {
       inst.sendRun();
@@ -129,7 +114,7 @@ class ServersController extends ServersManager {
 
   _makeInstance(ServerData server, {TerminalInstance instance, bool restoreView = false, bool restoreLog = false}) {
     SavedStateData _getLogState() {
-      final _child = _savedStateData.child('log_${server.uuid}');
+      final _child = _saved.child('log_${server.uuid}');
       _child.putString('name', server.uuid);
       return _child;
     }
@@ -139,7 +124,7 @@ class ServersController extends ServersManager {
         null,
         null,
         null,
-        InstanceViewState(style.clone(), toSave ? _savedStateData.child('view_${server.uuid}') : null,
+        InstanceViewState(style.clone(), toSave ? _saved.child('view_${server.uuid}') : null,
             restore: restoreView),
         Reconnect(() => run(server)));
     int incCounts = 0;
@@ -191,20 +176,19 @@ class ServersController extends ServersManager {
 
   @override
   _greatResurrector() async {
-    _savedStateData = await SavedStateData.restore();
     await LogsBox().filling();
     final saveAppState = MiscSettings().saveAppState;
     if (length == 0 || !saveAppState) {
       LogsBox().dispose();
-      await _savedStateData.clear();
+      await _saved.clear();
       return;
     }
 
     for (var server in _servers) {
-      final viewChild = _savedStateData.child('view_${server.uuid}');
+      final viewChild = _saved.child('view_${server.uuid}');
       if (viewChild.getBool('flag') == true) {
         debugPrint(' * Restoring ${server.name} = ${server.uuid}');
-        final logChild = _savedStateData.child('log_${server.uuid}');
+        final logChild = _saved.child('log_${server.uuid}');
         bool restoreLog = false;
         if (logChild.getBool('flag') == true) {
           restoreLog = true;
@@ -216,6 +200,6 @@ class ServersController extends ServersManager {
         viewChild.clear();
       }
     }
-    LogsBox().dispose();
+    await LogsBox().dispose();
   }
 }

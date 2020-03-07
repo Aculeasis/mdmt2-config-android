@@ -66,6 +66,8 @@ class Reconnect {
     _timer?.cancel();
   }
 
+  bool get isRun => _timer != null;
+
   void activate() {
     _timer?.cancel();
     _duration = null;
@@ -118,6 +120,9 @@ class TerminalInstance {
     view?.dispose();
   }
 
+
+  bool get loggerWait => logger?.getStage == ConnectStage.wait;
+  bool get controlWait => control?.getStage == ConnectStage.wait;
   bool get loggerWork => logger != null && logger.getStage != ConnectStage.wait;
   bool get controlWork => control != null && control.getStage != ConnectStage.wait;
   bool get work => loggerWork || controlWork;
