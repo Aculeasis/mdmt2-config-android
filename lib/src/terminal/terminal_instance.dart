@@ -102,8 +102,6 @@ class TerminalInstance {
   InstanceViewState view;
   Reconnect reconnect;
 
-  int lock = 0;
-
   TerminalInstance(this.logger, this.control, this.log, this.view, this.reconnect);
 
   void close() {
@@ -119,7 +117,6 @@ class TerminalInstance {
     log?.dispose();
     view?.dispose();
   }
-
 
   bool get loggerWait => logger?.getStage == ConnectStage.wait;
   bool get controlWait => control?.getStage == ConnectStage.wait;

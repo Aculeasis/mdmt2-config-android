@@ -30,7 +30,7 @@ abstract class ServersManager extends _BLoC {
 
   bool _removeInstance(ServerData server, {bool callDispose = true, bool notify = true});
 
-  bool _instanceMayRemoved(ServerData server) => server?.inst == null || (server.inst.lock == 0 && !server.inst.work);
+  bool _instanceMayRemoved(ServerData server) => server?.inst == null || !server.inst.work;
 
   void _removeAllInput() {
     for (var server in _servers) if (!_instanceMayRemoved(server)) return;

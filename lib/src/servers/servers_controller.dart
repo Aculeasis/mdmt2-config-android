@@ -71,7 +71,7 @@ class ServersController extends ServersManager {
   }
 
   bool _removeInstance(ServerData server, {bool callDispose = true, bool notify = true}) {
-    if (!_stopInput(server) || server.inst.lock > 0) return false;
+    if (!_stopInput(server)) return false;
     final inst = server.inst;
     server.inst = null;
     final diff = (inst.logger != null ? 1 : 0) + (inst.control != null ? 1 : 0);
@@ -96,6 +96,7 @@ class ServersController extends ServersManager {
   }
 
   void _runInput(ServerData server, {returnServerCallback result}) {
+    if (!(server.control || server.logger)) return;
     if (server.inst != null)
       _upgradeInstance(server);
     else
@@ -124,8 +125,7 @@ class ServersController extends ServersManager {
         null,
         null,
         null,
-        InstanceViewState(style.clone(), toSave ? _saved.child('view_${server.uuid}') : null,
-            restore: restoreView),
+        InstanceViewState(style.clone(), toSave ? _saved.child('view_${server.uuid}') : null, restore: restoreView),
         Reconnect(() => run(server)));
     int incCounts = 0;
     if (server.logger) {
@@ -153,13 +153,17 @@ class ServersController extends ServersManager {
       instance.control = null;
     }
 
+    assert(server.inst == null);
+    assert((instance.logger == null && instance.log == null) || instance.logger != null && instance.log != null);
+
     if ((instance.logger ?? instance.control) != null) {
+      assert(instance.view != null && instance.reconnect != null);
       server.inst = instance;
-      server.notifyListeners();
       _state.counts += incCounts;
       if (incCounts > 0) _sendState();
     } else
       instance.dispose();
+    server.notifyListeners();
   }
 
   void _upgradeInstance(ServerData server) {
@@ -167,7 +171,7 @@ class ServersController extends ServersManager {
     instance.reconnect.close();
     if (instance.work) return debugPrint(' ***Still running ${server.name}');
     if (((instance.logger != null) != server.logger || (instance.control != null) != server.control) &&
-        _removeInstance(server, callDispose: false)) {
+        _removeInstance(server, callDispose: false, notify: false)) {
       debugPrint(' ***Re-make ${server.name}');
       _makeInstance(server, instance: instance);
     } else

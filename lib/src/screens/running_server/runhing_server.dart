@@ -2,12 +2,14 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:mdmt2_config/src/misc.dart';
 import 'package:mdmt2_config/src/screens/running_server/controller.dart';
 import 'package:mdmt2_config/src/servers/server_data.dart';
 import 'package:mdmt2_config/src/settings/log_style.dart';
 import 'package:mdmt2_config/src/terminal/instance_view_state.dart';
 import 'package:mdmt2_config/src/terminal/log.dart';
 import 'package:mdmt2_config/src/terminal/terminal_control.dart';
+import 'package:mdmt2_config/src/terminal/terminal_instance.dart';
 
 class RunningServerPage extends StatefulWidget {
   final ServerData srv;
@@ -22,26 +24,55 @@ class RunningServerPage extends StatefulWidget {
 
 class _RunningServerPage extends State<RunningServerPage> with SingleTickerProviderStateMixin {
   TabController _tabController;
+  TerminalInstance _instance;
+  Log _log;
+  TerminalControl _control;
 
   @override
   void dispose() {
     super.dispose();
     _tabController.dispose();
-    widget.srv.inst.lock -= 1;
+    widget.srv.removeListener(_instanceRelinkListener);
   }
 
   @override
   void initState() {
-    widget.srv.inst.lock += 1;
     super.initState();
-    int initialIndex = widget.srv.inst.view.pageIndex.value;
-    if (initialIndex == 0 && widget.srv.inst.logger == null)
-      initialIndex = 1;
-    else if (initialIndex == 1 && widget.srv.inst.control == null) initialIndex = 0;
-    _tabController = TabController(length: 2, vsync: this, initialIndex: initialIndex);
-    _tabController.addListener(() {
-      widget.srv.inst.view.pageIndex.value = _tabController.index;
+    _instanceRelink();
+    if (_instance == null) {
+      _tabController = TabController(length: 2, vsync: this, initialIndex: 0);
+    } else {
+      int initialIndex = _instance.view.pageIndex.value;
+      if (initialIndex == 0 && _instance.log == null)
+        initialIndex = 1;
+      else if (initialIndex == 1 && _instance.control == null) initialIndex = 0;
+      _tabController = TabController(length: 2, vsync: this, initialIndex: initialIndex);
+      _tabController.addListener(_tabControllerListener);
+    }
+    widget.srv.addListener(_instanceRelinkListener);
+  }
+
+  _instanceRelink() {
+    _instance = widget.srv.inst;
+    _log = _instance?.log;
+    _control = _instance?.control;
+    debugPrint('BABAX');
+  }
+
+  _instanceRelinkListener() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final inst = widget.srv.inst;
+      if (inst != _instance || inst?.log != _log || inst?.control != _control)
+        setState(() {
+          _tabController.removeListener(_tabControllerListener);
+          _instanceRelink();
+          if (_instance != null) _tabController.addListener(_tabControllerListener);
+        });
     });
+  }
+
+  _tabControllerListener() {
+    _instance?.view?.pageIndex?.value = _tabController.index;
   }
 
   @override
@@ -59,8 +90,8 @@ class _RunningServerPage extends State<RunningServerPage> with SingleTickerProvi
             ]),
           )),
       body: TabBarView(controller: _tabController, children: <Widget>[
-        _oneTab(context),
-        _twoTab(context),
+        _oneTab(context, _instance, _log),
+        _twoTab(context, _instance, _control),
       ]),
     );
   }
@@ -69,10 +100,10 @@ class _RunningServerPage extends State<RunningServerPage> with SingleTickerProvi
     return ValueListenableBuilder(
         valueListenable: widget.srv,
         builder: (_, __, ___) {
-          final mayBe = widget.srv.inst != null &&
-              !widget.srv.inst.reconnect.isRun &&
-              (widget.srv.inst.loggerWait || widget.srv.inst.controlWait);
-          return IconButton(icon: Icon(Icons.settings_backup_restore), onPressed: mayBe ? widget.runCallback : null);
+          final enable = widget.srv.logger || widget.srv.control;
+          final mayRun = enable &&
+              (_instance == null || (!_instance.reconnect.isRun && (_instance.loggerWait || _instance.controlWait)));
+          return IconButton(icon: Icon(Icons.settings_backup_restore), onPressed: mayRun ? widget.runCallback : null);
         });
   }
 
@@ -81,67 +112,70 @@ class _RunningServerPage extends State<RunningServerPage> with SingleTickerProvi
       IconButton(
         icon: Icon(Icons.import_export),
         onPressed: () {
-          final index = widget.srv.inst.view.pageIndex.value;
+          final index = _instance?.view?.pageIndex?.value;
           if (index == 0)
-            widget.srv.inst.view.logExpanded.value = !widget.srv.inst.view.logExpanded.value;
-          else if (index == 1) widget.srv.inst.view.controlExpanded.value = !widget.srv.inst.view.controlExpanded.value;
+            _instance.view.logExpanded.value = !_instance.view.logExpanded.value;
+          else if (index == 1) _instance.view.controlExpanded.value = !_instance.view.controlExpanded.value;
         },
       ),
     ];
   }
 
-  Widget _oneTab(BuildContext context) {
+  Widget _oneTab(BuildContext context, TerminalInstance instance, Log log) {
     return Stack(
       children: <Widget>[
         Container(
           constraints: BoxConstraints.expand(),
-          child: widget.srv.inst?.log != null
-              ? LogListView(widget.srv.inst.log, widget.srv.inst.view, widget.srv.inst.view.unreadMessages)
-              : _disabledBody(),
+          child: log != null ? LogListView(log, instance.view, instance.view.unreadMessages) : _disabledBody(),
         ),
-        ValueListenableBuilder(
-            valueListenable: widget.srv.inst.view.logExpanded,
-            builder: (_, expanded, child) => expanded ? child : SizedBox(),
-            child: Container(
-              color: Colors.black.withOpacity(.5),
-              child: widget.srv.inst?.log != null ? _loggerSettings() : _disabledTop(),
-            )),
+        if (instance != null)
+          ValueListenableBuilder(
+              valueListenable: instance.view.logExpanded,
+              builder: (_, expanded, child) => expanded ? child : SizedBox(),
+              child: Container(
+                color: Colors.black.withOpacity(.5),
+                child: log != null ? _loggerSettings(instance.view, log) : _disabledTop(),
+              )),
       ],
     );
   }
 
-  Widget _twoTab(BuildContext context) {
+  Widget _twoTab(BuildContext context, TerminalInstance instance, TerminalControl control) {
     return Column(
       children: <Widget>[
-        ValueListenableBuilder(
-          valueListenable: widget.srv.inst.view.controlExpanded,
-          builder: (_, expanded, child) => !expanded
-              ? child
-              : Expanded(
-                  child: Container(
-                  child:
-                      widget.srv.inst?.control != null ? _controllerSettings(widget.srv.inst.control) : _disabledTop(),
-                )),
-          child: Expanded(
-            child: widget.srv.inst?.control != null
-                ? ControllerView(widget.srv.inst.control, widget.srv.inst.view)
-                : _disabledBody(),
-          ),
-        )
+        if (instance != null)
+          ValueListenableBuilder(
+            valueListenable: instance.view.controlExpanded,
+            builder: (_, expanded, child) => !expanded
+                ? child
+                : Expanded(
+                    child: Container(
+                    child: control != null ? _controllerSettings(control) : _disabledTop(),
+                  )),
+            child: Expanded(
+              child: control != null ? ControllerView(control, instance.view) : _disabledBody(),
+            ),
+          )
       ],
     );
   }
 
-  Widget _loggerSettings() {
+  Widget _loggerSettings(InstanceViewState view, Log log) {
     return ValueListenableBuilder(
-        valueListenable: widget.srv.inst.view.style,
+        valueListenable: view.style,
         builder: (context, _, __) => Column(
               mainAxisSize: MainAxisSize.min,
-              children: <Widget>[_loggerSettings1(), _loggerSettings2(), Divider(), _loggerSettings3(), Divider()],
+              children: <Widget>[
+                _loggerSettings1(view.style),
+                _loggerSettings2(view.style),
+                Divider(),
+                _loggerSettings3(log, view.unreadMessages),
+                Divider()
+              ],
             ));
   }
 
-  Widget _loggerSettings2() {
+  Widget _loggerSettings2(LogStyle viewStyle) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceAround,
       verticalDirection: VerticalDirection.down,
@@ -150,43 +184,40 @@ class _RunningServerPage extends State<RunningServerPage> with SingleTickerProvi
           valueListenable: widget.baseStyle,
           builder: (_, __, ___) => _loggerFlatButton(
               'Save',
-              widget.srv.inst.view.style.isEqual(widget.baseStyle)
+              viewStyle.isEqual(widget.baseStyle)
                   ? null
                   : () {
                       widget.baseStyle
-                        ..upgrade(widget.srv.inst.view.style)
+                        ..upgrade(viewStyle)
                         ..saveAsBaseStyle();
                     }),
         ),
         ValueListenableBuilder(
             valueListenable: widget.baseStyle,
             builder: (_, __, ___) => _loggerFlatButton(
-                'Reset',
-                widget.baseStyle.isEqual(widget.srv.inst.view.style)
-                    ? null
-                    : () => widget.srv.inst.view.style.upgrade(widget.baseStyle))),
+                'Reset', widget.baseStyle.isEqual(viewStyle) ? null : () => viewStyle.upgrade(widget.baseStyle))),
         _loggerFlatButton(
             'Default',
-            widget.srv.inst.view.style.isEqual(LogStyle())
+            viewStyle.isEqual(LogStyle())
                 ? null
                 : () {
                     final def = LogStyle();
-                    widget.srv.inst.view.style.upgrade(def);
+                    viewStyle.upgrade(def);
                   })
       ],
     );
   }
 
-  Widget _loggerSettings3() {
+  Widget _loggerSettings3(Log log, UnreadMessages unreadMessages) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       verticalDirection: VerticalDirection.down,
       children: <Widget>[
         ValueListenableBuilder(
-          valueListenable: widget.srv.inst.view.unreadMessages,
+          valueListenable: unreadMessages,
           builder: (_, __, ___) => _loggerFlatButton(
             'Clear log',
-            widget.srv.inst.log.isNotEmpty ? widget.srv.inst.log.clear : null,
+            log.isNotEmpty ? log.clear : null,
           ),
         )
       ],
@@ -204,70 +235,70 @@ class _RunningServerPage extends State<RunningServerPage> with SingleTickerProvi
     );
   }
 
-  Widget _loggerSettings1() {
+  Widget _loggerSettings1(LogStyle viewStyle) {
     String capitalize(LogLevel l) {
       final s = l.toString().split('.').last;
       return s[0].toUpperCase() + s.substring(1);
     }
 
-    final style = widget.srv.inst.view.style;
     return Row(children: [
       Expanded(
           child: PopupMenuButton(
               padding: EdgeInsets.zero,
               icon: _drawButton(
                 context,
-                'level: ${capitalize(style.lvl)}',
+                'level: ${capitalize(viewStyle.lvl)}',
               ),
               itemBuilder: (context) => [
                     for (LogLevel l in LogLevel.values)
-                      if (l != style.lvl)
+                      if (l != viewStyle.lvl)
                         PopupMenuItem(
                           child: Text(capitalize(l)),
                           value: l,
                         )
                   ],
-              onSelected: (value) => style.lvl = value)),
+              onSelected: (value) => viewStyle.lvl = value)),
       Expanded(
           child: PopupMenuButton(
               padding: EdgeInsets.zero,
-              icon: _drawButton(context, 'font: ${style.fontSize}'),
+              icon: _drawButton(context, 'font: ${viewStyle.fontSize}'),
               itemBuilder: (context) => [
                     for (int i = 2; i < 28; i += 4)
-                      if (i != style.fontSize)
+                      if (i != viewStyle.fontSize)
                         PopupMenuItem(
                           child: Text('$i'),
                           value: i,
                         )
                   ],
-              onSelected: (value) => style.fontSize = value)),
+              onSelected: (value) => viewStyle.fontSize = value)),
       Expanded(
           child: PopupMenuButton(
               padding: EdgeInsets.zero,
-              icon: _drawButton(context, 'time: ${style.timeFormat}'),
+              icon: _drawButton(context, 'time: ${viewStyle.timeFormat}'),
               itemBuilder: (context) => [
                     for (String l in timeFormats.keys)
-                      if (l != style.timeFormat)
+                      if (l != viewStyle.timeFormat)
                         PopupMenuItem(
                           child: Text('$l'),
                           value: l,
                         )
                   ],
-              onSelected: (value) => style.timeFormat = value)),
+              onSelected: (value) => viewStyle.timeFormat = value)),
       Expanded(
           child: PopupMenuButton(
               padding: EdgeInsets.zero,
-              icon: _drawButton(context, 'source: ${style.callLvl < LogStyle.callers.length ? style.callLvl : 'All'}'),
+              icon: _drawButton(
+                  context, 'source: ${viewStyle.callLvl < LogStyle.callers.length ? viewStyle.callLvl : 'All'}'),
               itemBuilder: (context) => [
                     // С нуля
                     for (int i = 0; i < LogStyle.callers.length + 1; i++)
-                      if (i != style.callLvl)
+                      if (i != viewStyle.callLvl)
                         PopupMenuItem(
                           child: Text('${i < LogStyle.callers.length ? i : 'All'}'),
                           value: i,
                         )
                   ],
-              onSelected: (value) => style.callLvl = value))
+              onSelected: (value) => viewStyle.callLvl = value))
     ]);
   }
 
@@ -334,22 +365,24 @@ class _LogListViewState extends State<LogListView> with SingleTickerProviderStat
                         builder: (context, _, __) => Container(
                               padding: EdgeInsets.symmetric(horizontal: 5),
                               // Ждем пока лог загрузится из файла
-                              child: !widget.log.isRestored? SizedBox() : ListView.builder(
-                                  controller: _logScroll,
-                                  reverse: true,
-                                  shrinkWrap: true,
-                                  itemCount: widget.log.length,
-                                  padding: EdgeInsets.zero,
-                                  itemBuilder: (context, i) {
-                                    if (i >= widget.log.length) return null;
-                                    final line = _buildLogLineView(widget.view.style, widget.log[i]);
-                                    return i == 0
-                                        ? Padding(
-                                            padding: EdgeInsets.only(bottom: 15),
-                                            child: line,
-                                          )
-                                        : line;
-                                  }),
+                              child: !widget.log.isRestored
+                                  ? SizedBox()
+                                  : ListView.builder(
+                                      controller: _logScroll,
+                                      reverse: true,
+                                      shrinkWrap: true,
+                                      itemCount: widget.log.length,
+                                      padding: EdgeInsets.zero,
+                                      itemBuilder: (context, i) {
+                                        if (i >= widget.log.length) return null;
+                                        final line = _buildLogLineView(widget.view.style, widget.log[i]);
+                                        return i == 0
+                                            ? Padding(
+                                                padding: EdgeInsets.only(bottom: 15),
+                                                child: line,
+                                              )
+                                            : line;
+                                      }),
                             ))),
                 Align(
                   alignment: Alignment.bottomRight,
