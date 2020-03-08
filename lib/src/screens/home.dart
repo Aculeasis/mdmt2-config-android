@@ -41,7 +41,7 @@ class HomePage extends StatelessWidget {
     final states = Provider.of<NativeStates>(context, listen: false);
     states.pageOpen(RootPage('add_server', 'add_server'));
     final value =
-        await serverFormDialog(context, ServerData(), servers.contains, states.child('_add_server', bySetting: true));
+        await serverFormDialog(context, ServerData(), servers.contains, states.child('_server_dialog', bySetting: true));
     states.pageClose();
     if (value != null) servers.add(value);
   }
@@ -51,7 +51,7 @@ class HomePage extends StatelessWidget {
     final states = Provider.of<NativeStates>(context, listen: false);
     states.pageOpen(RootPage('edit_server', server.name));
     final value =
-        await serverFormDialog(context, server, servers.contains, states.child('_edit_server', bySetting: true));
+        await serverFormDialog(context, server, servers.contains, states.child('_server_dialog', bySetting: true));
     states.pageClose();
     if (value != null) servers.upgrade(server, value);
   }

@@ -12,6 +12,7 @@ import 'package:validators/validators.dart';
 Future<ServerData> serverFormDialog(
     BuildContext context, ServerData _srv, Function(String name) contains, SavedStateData saved) async {
   final key = GlobalKey<FormState>();
+  final removeListeners = <Function>[];
   final ctlStr = {
     'name': _srv.name,
     'ip': _srv.ip,
@@ -25,10 +26,17 @@ Future<ServerData> serverFormDialog(
     'totpSalt': _srv.totpSalt,
   }.map((key, value) => MapEntry(key, ValueNotifier<bool>(saved?.getBool(key) ?? value)));
   if (saved != null) {
-    for (var key in ctlStr.keys) ctlStr[key].addListener(() => saved.putString(key, ctlStr[key].text));
-    for (var key in ctlBool.keys) ctlBool[key].addListener(() => saved.putBool(key, ctlBool[key].value));
+    for (var key in ctlStr.keys) {
+      final callBack = () => saved.putString(key, ctlStr[key].text);
+      ctlStr[key].addListener(callBack);
+      removeListeners.add(() => ctlStr[key].removeListener(callBack));
+    }
+    for (var key in ctlBool.keys) {
+      final callBack = () => saved.putBool(key, ctlBool[key].value);
+      ctlBool[key].addListener(callBack);
+      removeListeners.add(() => ctlBool[key].removeListener(callBack));
+    }
   }
-
   void finder() {
     saved?.putBool('_finder', true);
     Navigator.of(context).push(MaterialPageRoute(builder: (context) => FinderPage())).then((value) {
@@ -44,7 +52,7 @@ Future<ServerData> serverFormDialog(
   if (saved?.getBool('_finder') == true) {
     WidgetsBinding.instance.addPostFrameCallback((_) => finder());
   }
-  return showDialog<ServerData>(
+  final result = await showDialog<ServerData>(
       context: context,
       builder: (context) => AlertDialog(
             actions: <Widget>[
@@ -60,16 +68,12 @@ Future<ServerData> serverFormDialog(
                 ),
               RaisedButton(
                 child: Text('Cancel'),
-                onPressed: () {
-                  saved?.clear();
-                  Navigator.of(context).pop();
-                },
+                onPressed: () => Navigator.of(context).pop(),
               ),
               RaisedButton(
                 child: Text('Save'),
                 onPressed: () {
                   if (key.currentState.validate()) {
-                    saved?.clear();
                     Navigator.of(context).pop(ServerData(
                         name: ctlStr['name'].text,
                         ip: ctlStr['ip'].text,
@@ -155,6 +159,9 @@ Future<ServerData> serverFormDialog(
               ),
             ),
           ));
+  for (var victim in removeListeners) victim();
+  await saved?.clear();
+  return result;
 }
 
 Future<bool> dialogYesNo(BuildContext context, String title, msg, yes, no) {
