@@ -56,7 +56,6 @@ class _RunningServerPage extends State<RunningServerPage> with SingleTickerProvi
     _instance = widget.srv.inst;
     _log = _instance?.log;
     _control = _instance?.control;
-    debugPrint('BABAX');
   }
 
   _instanceRelinkListener() {
@@ -348,6 +347,39 @@ class _LogListViewState extends State<LogListView> with SingleTickerProviderStat
     _logScroll.addListener(() => widget.view.scrollCallback(_logScroll));
   }
 
+  Widget _newDayLine(Widget line, DateTime time) {
+    final multiplier = widget.view.style.base.fontSize / 14;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Container(
+          alignment: Alignment.center,
+          child: Container(
+            margin: EdgeInsets.only(top: 25 * multiplier, bottom: 10 * multiplier),
+            padding: EdgeInsets.symmetric(horizontal: 14 * multiplier, vertical: 7 * multiplier),
+            decoration: BoxDecoration(
+                border: Border.all(),
+                borderRadius: BorderRadius.circular(30),
+                color: Theme.of(context).highlightColor.withOpacity(.3)),
+            child: Text(
+              DateFormat('MMMM d').format(time),
+              style: widget.view.style.base,
+              textScaleFactor: 1.2,
+            ),
+          ),
+        ),
+        line
+      ],
+    );
+  }
+
+  bool _timeUp(DateTime oldT, DateTime newT) {
+    if (newT.year != oldT.year) return newT.year > oldT.year;
+    if (newT.month != oldT.month) return newT.month > oldT.month;
+    if (newT.day != oldT.day) return newT.day > oldT.day;
+    return false;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -365,9 +397,8 @@ class _LogListViewState extends State<LogListView> with SingleTickerProviderStat
                         builder: (context, _, __) => Container(
                               padding: EdgeInsets.symmetric(horizontal: 5),
                               // Ждем пока лог загрузится из файла
-                              child: !widget.log.isRestored
-                                  ? SizedBox()
-                                  : ListView.builder(
+                              child: widget.log.isRestored
+                                  ? ListView.builder(
                                       controller: _logScroll,
                                       reverse: true,
                                       shrinkWrap: true,
@@ -375,14 +406,18 @@ class _LogListViewState extends State<LogListView> with SingleTickerProviderStat
                                       padding: EdgeInsets.zero,
                                       itemBuilder: (context, i) {
                                         if (i >= widget.log.length) return null;
-                                        final line = _buildLogLineView(widget.view.style, widget.log[i]);
+                                        Widget line = _buildLogLineView(widget.view.style, widget.log[i]);
+                                        if (i + 1 == widget.log.length ||
+                                            _timeUp(widget.log[i + 1].time, widget.log[i].time))
+                                          line = _newDayLine(line, widget.log[i].time);
                                         return i == 0
                                             ? Padding(
                                                 padding: EdgeInsets.only(bottom: 15),
                                                 child: line,
                                               )
                                             : line;
-                                      }),
+                                      })
+                                  : SizedBox(),
                             ))),
                 Align(
                   alignment: Alignment.bottomRight,
