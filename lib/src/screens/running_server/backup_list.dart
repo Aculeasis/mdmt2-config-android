@@ -102,6 +102,8 @@ class _Controller {
     _subscription?.cancel();
     _view.buttons['manual_backup'].removeListener(_enableBackupManualSet);
     _view.buttons['terminal_stop'].removeListener(_terminalStop);
+    updateCircle.dispose();
+    filename.dispose();
     _timer?.cancel();
   }
 }

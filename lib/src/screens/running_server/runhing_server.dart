@@ -99,7 +99,7 @@ class _RunningServerPage extends State<RunningServerPage> with SingleTickerProvi
     return ValueListenableBuilder(
         valueListenable: widget.srv,
         builder: (_, __, ___) {
-          final enable = widget.srv.logger || widget.srv.control;
+          final enable = widget.srv.logger || widget.srv.control || _instance != null;
           final mayRun = enable &&
               (_instance == null || (!_instance.reconnect.isRun && (_instance.loggerWait || _instance.controlWait)));
           return IconButton(icon: Icon(Icons.settings_backup_restore), onPressed: mayRun ? widget.runCallback : null);

@@ -96,11 +96,15 @@ class ServersController extends ServersManager {
   }
 
   void _runInput(ServerData server, {returnServerCallback result}) {
-    if (!(server.control || server.logger)) return;
-    if (server.inst != null)
+    if (server.inst != null) {
+      if (!(server.control || server.logger)) {
+        clear(server);
+        return;
+      }
       _upgradeInstance(server);
-    else
+    } else {
       _makeInstance(server);
+    }
     _runInstance(server?.inst?.logger);
     _runInstance(server?.inst?.control);
 
@@ -116,8 +120,8 @@ class ServersController extends ServersManager {
   _makeInstance(ServerData server, {TerminalInstance instance, bool restoreView = false}) {
     SavedStateData _getState() => MiscSettings().saveAppState ? _saved.child('states_${server.uuid}') : null;
 
-    instance ??= TerminalInstance(null, null, null,
-        InstanceViewState(style.clone(), _getState(), restore: restoreView), Reconnect(() => run(server)));
+    instance ??= TerminalInstance(null, null, null, InstanceViewState(style.clone(), _getState(), restore: restoreView),
+        Reconnect(() => run(server)));
     int incCounts = 0;
     if (server.logger) {
       instance.log ??= Log(instance.view.style, instance.view.unreadMessages, _getState(), server.uuid);

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -146,4 +147,16 @@ class ServerData extends ChangeThrottledValueNotifier {
   }
 
   ServerData clone() => ServerData().._upgrade(this);
+
+  @override
+  void reset() {
+    super.reset();
+    assert(() {
+      Timer(Duration(milliseconds: 300), () {
+        assert(!this.hasListeners);
+        debugPrint('ServerData ---- OK!');
+      });
+      return true;
+    }());
+  }
 }

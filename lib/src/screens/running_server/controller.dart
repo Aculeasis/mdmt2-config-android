@@ -6,7 +6,6 @@ import 'package:mdmt2_config/src/screens/running_server/backup_list.dart';
 import 'package:mdmt2_config/src/terminal/instance_view_state.dart';
 import 'package:mdmt2_config/src/terminal/terminal_client.dart';
 import 'package:mdmt2_config/src/terminal/terminal_control.dart';
-import 'package:mdmt2_config/src/misc.dart';
 import 'package:mdmt2_config/src/widgets.dart';
 
 class ControllerView extends StatefulWidget {
@@ -93,7 +92,7 @@ class _ControllerViewState extends State<ControllerView> {
             divider('TTS/ASK/VOICE'),
             Padding(
               padding: EdgeInsets.symmetric(horizontal: 5),
-              child: fieldForTAVLine(widget.view, (cmd, msg) => widget.control.executeMe(cmd, data: msg), _isConnected),
+              child: FieldForTAVLine(widget.view, (cmd, msg) => widget.control.executeMe(cmd, data: msg), _isConnected),
             ),
             divider('Music'),
             Padding(
@@ -479,67 +478,85 @@ Widget dropdownButtonInt(ValueNotifier<int> value, int count) {
           onChanged: (newVal) => value.value = newVal));
 }
 
-Widget fieldForTAVLine(InstanceViewState state, Function(String cmd, String msg) onSend, bool isConnected) {
-  final TextEditingController _controller = TextEditingController(text: state.textTAV);
-  final _notifier = ChangeValueNotifier();
-  _send() {
-    onSend(state.modeTAV, state.textTAV);
-    if (state.modeTAV != 'VOICE') _controller.text = '';
+class FieldForTAVLine extends StatefulWidget {
+  final InstanceViewState state;
+  final Function(String cmd, String msg) onSend;
+  final bool isConnected;
+  FieldForTAVLine(this.state, this.onSend, this.isConnected);
+  @override
+  _FieldForTAVLineState createState() => _FieldForTAVLineState();
+}
+
+class _FieldForTAVLineState extends State<FieldForTAVLine> {
+  TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.state.textTAV);
+    _controller.addListener(() {
+      if (_controller.text == widget.state.textTAV) return;
+      final reBuild = widget.state.modeTAV != 'VOICE' && (_controller.text == '' || widget.state.textTAV == '');
+      widget.state.textTAV = _controller.text;
+      if (reBuild) setState(() {});
+    });
   }
 
-  _controller.addListener(() {
-    if (_controller.text == state.textTAV) return;
-    final reBuild = state.modeTAV != 'VOICE' && (_controller.text == '' || state.textTAV == '');
-    state.textTAV = _controller.text;
-    if (reBuild) _notifier.notifyListeners();
-  });
-  return ValueListenableBuilder(
-      valueListenable: _notifier,
-      builder: (_, __, ___) {
-        final toSend = !isConnected || (state.modeTAV != 'VOICE' && state.textTAV == '') ? null : _send;
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Container(
-                decoration: BoxDecoration(
-                  border: Border(
-                      bottom: BorderSide(
-                    color: Color(0xFFBDBDBD),
-                    width: 0.0,
-                  )),
-                ),
-                child: Padding(
-                  padding: EdgeInsets.only(left: 5),
-                  child: DropdownButton<String>(
-                    underline: SizedBox(),
-                    items: <String>['TTS', 'ASK', 'VOICE'].map<DropdownMenuItem<String>>((String value) {
-                      return DropdownMenuItem<String>(
-                        value: value,
-                        child: Text(value.length < 5 ? '  $value' : value),
-                      );
-                    }).toList(),
-                    value: state.modeTAV,
-                    onChanged: (val) {
-                      state.modeTAV = val;
-                      _notifier.notifyListeners();
-                    },
-                  ),
-                )),
-            Expanded(
-              child: TextField(
-                textInputAction: TextInputAction.send,
-                maxLines: 1,
-                onEditingComplete: toSend,
-                autofocus: false,
-                controller: _controller,
-                enabled: state.modeTAV != 'VOICE' && isConnected,
-              ),
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  _send() {
+    widget.onSend(widget.state.modeTAV, widget.state.textTAV);
+    if (widget.state.modeTAV != 'VOICE') _controller.text = '';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final toSend =
+        !widget.isConnected || (widget.state.modeTAV != 'VOICE' && widget.state.textTAV == '') ? null : _send;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Container(
+            decoration: BoxDecoration(
+              border: Border(
+                  bottom: BorderSide(
+                color: Color(0xFFBDBDBD),
+                width: 0.0,
+              )),
             ),
-            IconButton(
-              onPressed: toSend,
-              icon: Icon(toSend != null ? Icons.send : Icons.do_not_disturb_on),
-            )
-          ],
-        );
-      });
+            child: Padding(
+              padding: EdgeInsets.only(left: 5),
+              child: DropdownButton<String>(
+                underline: SizedBox(),
+                items: <String>['TTS', 'ASK', 'VOICE'].map<DropdownMenuItem<String>>((String value) {
+                  return DropdownMenuItem<String>(
+                    value: value,
+                    child: Text(value.length < 5 ? '  $value' : value),
+                  );
+                }).toList(),
+                value: widget.state.modeTAV,
+                onChanged: (val) => setState(() => widget.state.modeTAV = val),
+              ),
+            )),
+        Expanded(
+          child: TextField(
+            textInputAction: TextInputAction.send,
+            maxLines: 1,
+            onEditingComplete: toSend,
+            autofocus: false,
+            controller: _controller,
+            enabled: widget.state.modeTAV != 'VOICE' && widget.isConnected,
+          ),
+        ),
+        IconButton(
+          onPressed: toSend,
+          icon: Icon(toSend != null ? Icons.send : Icons.do_not_disturb_on),
+        )
+      ],
+    );
+  }
 }

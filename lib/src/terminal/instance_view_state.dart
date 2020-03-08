@@ -25,6 +25,7 @@ class _N {
 }
 
 class _MainStates {
+  final _removeListeners = <Function>[];
   final SavedStateData _saved;
   final LogStyle style;
   // Счетчик + уведомления о изменении сообщений в логе
@@ -73,14 +74,38 @@ class _MainStates {
 
   _addListeners() {
     _saved.putBool('flag', true);
-    unreadMessages.addListener(() => _saved.putInt(_N.unreadMessages, unreadMessages.value));
-    logExpanded.addListener(() => _saved.putBool(_N.logExpanded, logExpanded.value));
-    controlExpanded.addListener(() => _saved.putBool(_N.controlExpanded, controlExpanded.value));
-    pageIndex.addListener(() => _saved.putInt(_N.pageIndex, pageIndex.value));
-    modelIndex.addListener(() => _saved.putInt(_N.modelIndex, modelIndex.value));
-    sampleIndex.addListener(() => _saved.putInt(_N.sampleIndex, sampleIndex.value));
-    catchQryStatus.addListener(() => _saved.putBool(_N.catchQryStatus, catchQryStatus.value));
-    style.addListener(() => _saved.putString(_N.style, jsonEncode(style)));
+
+    final cb1 = () => _saved.putInt(_N.unreadMessages, unreadMessages.value);
+    unreadMessages.addListener(cb1);
+    _removeListeners.add(() => unreadMessages.removeListener(cb1));
+
+    final cb2 = () => _saved.putBool(_N.logExpanded, logExpanded.value);
+    logExpanded.addListener(cb2);
+    _removeListeners.add(() => logExpanded.removeListener(cb2));
+
+    final cb3 = () => _saved.putBool(_N.controlExpanded, controlExpanded.value);
+    controlExpanded.addListener(cb3);
+    _removeListeners.add(() => controlExpanded.removeListener(cb3));
+
+    final cb4 = () => _saved.putInt(_N.pageIndex, pageIndex.value);
+    pageIndex.addListener(cb4);
+    _removeListeners.add(() => pageIndex.removeListener(cb4));
+
+    final cb5 = () => _saved.putInt(_N.modelIndex, modelIndex.value);
+    modelIndex.addListener(cb5);
+    _removeListeners.add(() => modelIndex.removeListener(cb5));
+
+    final cb6 = () => _saved.putInt(_N.sampleIndex, sampleIndex.value);
+    sampleIndex.addListener(cb6);
+    _removeListeners.add(() => sampleIndex.removeListener(cb6));
+
+    final cb7 = () => _saved.putBool(_N.catchQryStatus, catchQryStatus.value);
+    catchQryStatus.addListener(cb7);
+    _removeListeners.add(() => catchQryStatus.removeListener(cb7));
+
+    final cb8 = () => _saved.putString(_N.style, jsonEncode(style));
+    style.addListener(cb8);
+    _removeListeners.add(() => style.removeListener(cb8));
   }
 
   _restore() {
@@ -107,12 +132,13 @@ class _MainStates {
   }
 
   void dispose() {
+    // Думаю можно не разрушать пулы подписчиков а просто всех отписать
     unreadMessages.reset();
-    style.dispose();
-    debugPrint('DISPOSE VIEW');
+    for (var remove in _removeListeners) remove();
+    _removeListeners.clear();
     _saved?.clear();
+    debugPrint('DISPOSE VIEW');
   }
-
 }
 
 class InstanceViewState extends _MainStates {
@@ -149,8 +175,28 @@ class InstanceViewState extends _MainStates {
 
   void dispose() {
     _stopAnimation();
-    for (var btn in buttons.values) btn.dispose();
+    reset();
     super.dispose();
+    assert(() {
+      Timer(Duration(seconds: 2), () {
+        for (var btn in buttons.values) assert(!btn.hasListeners); // ignore: invalid_use_of_protected_member
+        assert(!unreadMessages.hasListeners); // ignore: invalid_use_of_protected_member
+        assert(!backButton.hasListeners); // ignore: invalid_use_of_protected_member
+        assert(!listenerOnOff.hasListeners); // ignore: invalid_use_of_protected_member
+        assert(!musicStatus.hasListeners); // ignore: invalid_use_of_protected_member
+        assert(!volume.hasListeners); // ignore: invalid_use_of_protected_member
+        assert(!musicVolume.hasListeners); // ignore: invalid_use_of_protected_member
+        assert(!style.hasListeners); // ignore: invalid_use_of_protected_member
+        assert(!logExpanded.hasListeners); // ignore: invalid_use_of_protected_member
+        assert(!controlExpanded.hasListeners); // ignore: invalid_use_of_protected_member
+        assert(!pageIndex.hasListeners); // ignore: invalid_use_of_protected_member
+        assert(!modelIndex.hasListeners); // ignore: invalid_use_of_protected_member
+        assert(!sampleIndex.hasListeners); // ignore: invalid_use_of_protected_member
+        assert(!catchQryStatus.hasListeners); // ignore: invalid_use_of_protected_member
+        debugPrint('InstanceViewState ---- OK!');
+      });
+      return true;
+    }());
   }
 
   void scrollBack(ScrollController sc) =>

@@ -50,7 +50,7 @@ abstract class ServersManager extends _BLoC {
   void _upgradeInput(ServerData oldServer, ServerData server) {
     final oldName = oldServer?.name;
     final index = indexOf(oldName);
-    if (server == null || index == -1 || !_servers[index].upgrade(server)) return;
+    if (server == null || index == -1 || !_servers[index].upgrade(server..reset())) return;
     if (oldName != server.name) {
       _indices.remove(oldName);
       _rebuildIndex(start: index, length: index + 1);
@@ -58,18 +58,19 @@ abstract class ServersManager extends _BLoC {
     _servers[index].saveServerData(index);
   }
 
-  bool _addInput(ServerData server) {
+  bool _addInput(ServerData server, {reset = true}) {
     if (server.name != '' && !contains(server.name)) {
       _add(server);
       _saveAll(start: _servers.length - 1);
       notifyListeners();
       return true;
     }
+    if (reset) server.reset();
     return false;
   }
 
   void _addAlwaysInput(ServerData server) {
-    if (!_addInput(server)) {
+    if (!_addInput(server, reset: false)) {
       server.name = _newUniqueName(server.name);
       _addInput(server);
     }
