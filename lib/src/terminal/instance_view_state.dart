@@ -113,7 +113,6 @@ class _MainStates {
     _saved?.clear();
   }
 
-  void reset() => unreadMessages.reset();
 }
 
 class InstanceViewState extends _MainStates {
@@ -146,7 +145,6 @@ class InstanceViewState extends _MainStates {
 
   void reset() {
     for (var btn in buttons.values) btn.reset();
-    super.reset();
   }
 
   void dispose() {

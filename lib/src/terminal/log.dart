@@ -45,6 +45,7 @@ class LogLine {
 }
 
 class Log {
+  static const logFlag = 'log_state_restore';
   final SavedStateData _saved;
   FileLog _fileLog;
   final UnreadMessages _unreadMessages;
@@ -56,12 +57,17 @@ class Log {
 
   LogLevel _lvl;
 
-  Log(this._style, this._unreadMessages, this._saved, bool restore) {
+  Log(this._style, this._unreadMessages, this._saved, String uuid) {
     _lvl = _style.lvl;
     _style.addListener(_setLvl);
-    _fileLog = LogsBox().getFileLog(_saved?.getString('name'));
+    if (_saved == null) {
+      isRestored = true;
+      return;
+    }
+    final restore = _saved.getBool(logFlag) == true;
+    _fileLog = LogsBox().getFileLog(uuid);
     if (_fileLog != null) {
-      _saved.putBool('flag', true);
+      _saved.putBool(logFlag, true);
       _fileLog.maxLineCount = maxLength;
       _fileLog.maxDirty = (maxLength / 10).truncate();
       if (restore)
@@ -93,7 +99,7 @@ class Log {
     debugPrint('DISPOSE LOG');
     _style.removeListener(_setLvl);
     _unreadMessages.messagesRead();
-    _saved?.clear();
+    _saved?.remove(logFlag);
     _fileLog?.dispose();
   }
 

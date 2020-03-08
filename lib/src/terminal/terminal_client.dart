@@ -6,6 +6,7 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 import 'package:mdmt2_config/src/servers/server_data.dart';
 import 'package:mdmt2_config/src/terminal/log.dart';
+import 'package:native_state/native_state.dart';
 import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/status.dart' as status;
 
@@ -136,11 +137,12 @@ abstract class TerminalClient {
   @protected
   Log log;
   final String name;
+  final SavedStateData _saved;
   IOWebSocketChannel _channel;
   StreamSubscription<dynamic> _listener;
   @protected
   ConnectStage stage = ConnectStage.wait;
-  bool hasCriticalError = false;
+  bool hasCriticalError;
   set setLog(Log newLog) => log = newLog;
   ConnectStage get getStage => stage;
 
@@ -163,7 +165,8 @@ abstract class TerminalClient {
   @protected
   void removeRequestHandler(String method) => _requestHandlers.remove(method);
 
-  TerminalClient(this.server, this.mode, this._workerNotifyGlobal, {this.log, this.name}) {
+  TerminalClient(this.server, this.mode, this._workerNotifyGlobal, this._saved, this.name, {this.log}) {
+    _restoreCriticalError();
     _workSignal.stream.listen((event) {
       if (event.type == WorkSignalsType.close || event.type == WorkSignalsType.selfClose) {
         // уже закрыли или закрываем
@@ -171,7 +174,7 @@ abstract class TerminalClient {
           return;
         else {
           stage = ConnectStage.closing;
-          hasCriticalError = event.error != null;
+          _setCriticalError(event.error != null);
           _close(event, event.isDead);
         }
       } else if (event.type == WorkSignalsType.run)
@@ -223,7 +226,7 @@ abstract class TerminalClient {
   sendRun() => _workSignal.add(WorkSignals(WorkSignalsType.run, null, false));
 
   _run() {
-    hasCriticalError = false;
+    _setCriticalError(false);
     _sendWorkNotify(WorkingStatChange.connecting);
     toSysLog('Start connecting to ${server.uri}...');
     try {
@@ -291,6 +294,7 @@ abstract class TerminalClient {
     _workSignal.close();
     _workerNotifyLocal.close();
     _channel?.sink?.close();
+    _setCriticalError(false);
     debugPrint('DISPOSE $name');
   }
 
@@ -300,6 +304,13 @@ abstract class TerminalClient {
       _channel.sink.add(data);
     }
   }
+
+  void _setCriticalError(bool isCritical) {
+    hasCriticalError = isCritical;
+    _saved?.putBool('${name}_hasCriticalError', isCritical);
+  }
+
+  void _restoreCriticalError() => hasCriticalError = _saved?.getBool('${name}_hasCriticalError') ?? false;
 
   @protected
   callJRPC(String method, {dynamic params, AsyncResponseHandler handler, bool isNotify = false}) {

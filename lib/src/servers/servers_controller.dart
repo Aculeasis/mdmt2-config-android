@@ -113,26 +113,16 @@ class ServersController extends ServersManager {
     }
   }
 
-  _makeInstance(ServerData server, {TerminalInstance instance, bool restoreView = false, bool restoreLog = false}) {
-    SavedStateData _getLogState() {
-      final _child = _saved.child('log_${server.uuid}');
-      _child.putString('name', server.uuid);
-      return _child;
-    }
+  _makeInstance(ServerData server, {TerminalInstance instance, bool restoreView = false}) {
+    SavedStateData _getState() => MiscSettings().saveAppState ? _saved.child('states_${server.uuid}') : null;
 
-    final toSave = MiscSettings().saveAppState;
-    instance ??= TerminalInstance(
-        null,
-        null,
-        null,
-        InstanceViewState(style.clone(), toSave ? _saved.child('view_${server.uuid}') : null, restore: restoreView),
-        Reconnect(() => run(server)));
+    instance ??= TerminalInstance(null, null, null,
+        InstanceViewState(style.clone(), _getState(), restore: restoreView), Reconnect(() => run(server)));
     int incCounts = 0;
     if (server.logger) {
-      instance.log ??=
-          Log(instance.view.style, instance.view.unreadMessages, toSave ? _getLogState() : null, restoreLog);
+      instance.log ??= Log(instance.view.style, instance.view.unreadMessages, _getState(), server.uuid);
       if (instance.logger == null)
-        instance.logger = TerminalLogger(server, _startStopChange, instance.log);
+        instance.logger = TerminalLogger(server, _getState(), _startStopChange, instance.log);
       else
         instance.logger.setLog = instance.log;
       incCounts++;
@@ -144,7 +134,8 @@ class ServersController extends ServersManager {
     }
     if (server.control) {
       if (instance.control == null)
-        instance.control = TerminalControl(server, _startStopChange, instance.log, instance.view, instance.reconnect);
+        instance.control =
+            TerminalControl(server, _getState(), _startStopChange, instance.log, instance.view, instance.reconnect);
       else
         instance.control.setLog = instance.log;
       incCounts++;
@@ -189,19 +180,12 @@ class ServersController extends ServersManager {
     }
 
     for (var server in _servers) {
-      final viewChild = _saved.child('view_${server.uuid}');
-      if (viewChild.getBool('flag') == true) {
+      final states = _saved.child('states_${server.uuid}');
+      if (states.getBool('flag') == true) {
         debugPrint(' * Restoring ${server.name} = ${server.uuid}');
-        final logChild = _saved.child('log_${server.uuid}');
-        bool restoreLog = false;
-        if (logChild.getBool('flag') == true) {
-          restoreLog = true;
-        } else {
-          logChild.clear();
-        }
-        _makeInstance(server, restoreView: true, restoreLog: restoreLog);
+        _makeInstance(server, restoreView: true);
       } else {
-        viewChild.clear();
+        states.clear();
       }
     }
     await LogsBox().dispose();

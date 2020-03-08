@@ -1,9 +1,11 @@
 import 'dart:async';
 
+import 'package:mdmt2_config/src/servers/server_data.dart';
 import 'package:mdmt2_config/src/terminal/instance_view_state.dart';
 import 'package:mdmt2_config/src/terminal/log.dart';
 import 'package:mdmt2_config/src/terminal/terminal_client.dart';
 import 'package:mdmt2_config/src/terminal/terminal_instance.dart';
+import 'package:native_state/native_state.dart';
 
 class BackupLine {
   final String filename;
@@ -45,8 +47,8 @@ class TerminalControl extends TerminalClient {
   final Reconnect reconnect;
   _ReconnectStage _reconnectStage = _ReconnectStage.no;
 
-  TerminalControl(server, _stopNotifyStream, log, this.view, this.reconnect)
-      : super(server, WorkingMode.controller, _stopNotifyStream, log: log, name: 'Controller') {
+  TerminalControl(ServerData server, SavedStateData saved, _stopNotifyStream, log, this.view, this.reconnect)
+      : super(server, WorkingMode.controller, _stopNotifyStream, saved, 'Controller', log: log) {
     subscribeTo.addAll(view.buttons.keys);
     _externalStreamCMD.stream.listen((event) => _externalCMD(event.cmd.toLowerCase(), event.data));
     _addHandlers();
