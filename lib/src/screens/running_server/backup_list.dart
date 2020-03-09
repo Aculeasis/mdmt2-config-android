@@ -87,7 +87,7 @@ class _Controller {
   }
 
   void initState() {
-    _subscription = _control.workerNotifyListen((event) {
+    _subscription = _control.stateStream.listen((_) {
       isConnected = _control.getStage == ConnectStage.controller;
       _enableBackupManualSet();
       _enableUpdateSet();

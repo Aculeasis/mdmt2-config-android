@@ -47,8 +47,8 @@ class TerminalControl extends TerminalClient {
   final Reconnect reconnect;
   _ReconnectStage _reconnectStage = _ReconnectStage.no;
 
-  TerminalControl(ServerData server, SavedStateData saved, _stopNotifyStream, log, this.view, this.reconnect)
-      : super(server, WorkingMode.controller, _stopNotifyStream, saved, 'Controller', log: log) {
+  TerminalControl(ServerData server, SavedStateData saved, log, this.view, this.reconnect)
+      : super(server, WorkingMode.controller, saved, 'Controller', log: log) {
     subscribeTo.addAll(view.buttons.keys);
     _externalStreamCMD.stream.listen((event) => _externalCMD(event.cmd.toLowerCase(), event.data));
     _addHandlers();

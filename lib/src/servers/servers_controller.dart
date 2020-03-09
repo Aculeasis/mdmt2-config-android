@@ -26,31 +26,31 @@ class ServersController extends ServersManager {
   final SavedStateData _saved;
   final style = LogStyle()..loadAsBaseStyle();
   final _state = InstancesState();
-  final _startStopChange = StreamController<WorkingNotification>.broadcast();
   final _stateStream = BehaviorSubject<InstancesState>();
   Stream<InstancesState> stateStream;
 
   ServersController(this._saved) {
     stateStream = _stateStream.throttleTime(MiscSettings().throttleTime, trailing: true);
-    _startStopChange.stream.listen((event) {
-      event.server.notifyListeners();
-      if (event.signal == WorkingStatChange.connecting)
-        _state.active++;
-      else if (event.signal == WorkingStatChange.closing)
-        _state.closing++;
-      else if (event.signal == WorkingStatChange.disconnected ||
-          event.signal == WorkingStatChange.disconnectedOnError) {
-        _state.active--;
-        _state.closing--;
-        if (event.server.inst?.work == false) event.server.inst?.reconnect?.start();
-      } else
-        return;
-      _sendState();
-    });
+  }
+
+  _instanceSignalCollector(WorkingNotification event) {
+    event.server.notifyListeners();
+    if (event.signal == WorkingStatChange.connecting) {
+      _state.active++;
+    } else if (event.signal == WorkingStatChange.closing) {
+      _state.closing++;
+    } else if (event.signal == WorkingStatChange.broken) {
+      _state.active--;
+    } else if (event.signal == WorkingStatChange.close || event.signal == WorkingStatChange.closeOnError) {
+      _state.active--;
+      _state.closing--;
+      if (event.server.inst?.work == false) event.server.inst?.reconnect?.start();
+    } else
+      return;
+    _sendState();
   }
 
   void dispose() {
-    _startStopChange.close();
     _stateStream.close();
     _clearAllInput();
     style.dispose();
@@ -125,10 +125,12 @@ class ServersController extends ServersManager {
     int incCounts = 0;
     if (server.logger) {
       instance.log ??= Log(instance.view.style, instance.view.unreadMessages, _getState(), server.uuid);
-      if (instance.logger == null)
-        instance.logger = TerminalLogger(server, _getState(), _startStopChange, instance.log);
-      else
+      if (instance.logger == null) {
+        instance.logger = TerminalLogger(server, _getState(), instance.log);
+        instance.logger.stateStream.listen(_instanceSignalCollector);
+      } else {
         instance.logger.setLog = instance.log;
+      }
       incCounts++;
     } else {
       instance.logger?.dispose();
@@ -137,11 +139,12 @@ class ServersController extends ServersManager {
       instance.log = null;
     }
     if (server.control) {
-      if (instance.control == null)
-        instance.control =
-            TerminalControl(server, _getState(), _startStopChange, instance.log, instance.view, instance.reconnect);
-      else
+      if (instance.control == null) {
+        instance.control = TerminalControl(server, _getState(), instance.log, instance.view, instance.reconnect);
+        instance.control.stateStream.listen(_instanceSignalCollector);
+      } else {
         instance.control.setLog = instance.log;
+      }
       incCounts++;
     } else {
       instance.control?.dispose();

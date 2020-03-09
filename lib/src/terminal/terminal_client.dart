@@ -20,7 +20,7 @@ const DEEP_DEBUG = false;
 
 enum ConnectStage { wait, connected, connecting, sendAuth, sendDuplex, logger, controller, happy, closing }
 
-enum WorkingStatChange { connecting, connected, closing, disconnected, disconnectedOnError }
+enum WorkingStatChange { connecting, broken, connected, closing, close, closeOnError }
 
 enum WorkingMode { logger, controller }
 
@@ -132,8 +132,7 @@ class AsyncResponseHandler {
 abstract class TerminalClient {
   static const connectLimit = 10;
   static const closeLimit = 10;
-  final StreamController<WorkingNotification> _workerNotifyGlobal;
-  final StreamController<WorkingStatChange> _workerNotifyLocal = StreamController<WorkingStatChange>.broadcast();
+  final StreamController<WorkingNotification> _stateStream = StreamController<WorkingNotification>.broadcast();
   final StreamController<WorkSignals> _workSignal = StreamController<WorkSignals>();
   final ServerData server;
   final WorkingMode mode;
@@ -168,7 +167,7 @@ abstract class TerminalClient {
   @protected
   void removeRequestHandler(String method) => _requestHandlers.remove(method);
 
-  TerminalClient(this.server, this.mode, this._workerNotifyGlobal, this._saved, this.name, {this.log}) {
+  TerminalClient(this.server, this.mode, this._saved, this.name, {this.log}) {
     _restoreCriticalError();
     _workSignal.stream.listen((event) {
       if (stage == ConnectStage.connecting) return;
@@ -217,9 +216,7 @@ abstract class TerminalClient {
     }, errorHandler: _criticalError);
   }
 
-  StreamSubscription<WorkingStatChange> workerNotifyListen(void onData(WorkingStatChange event),
-          {Function onError, void onDone(), bool cancelOnError}) =>
-      _workerNotifyLocal.stream.listen(onData, onError: onError, onDone: onDone, cancelOnError: cancelOnError);
+  Stream<WorkingNotification> get stateStream => _stateStream.stream;
 
   // Закрывем сокет. Можно передать ошибку, тогда сокет будет закрыт с ошибкой.
   sendClose({dynamic error, bool isDead = false}) => _workSignal.add(WorkSignals(WorkSignalsType.close, error, isDead));
@@ -268,7 +265,7 @@ abstract class TerminalClient {
     if (msg != null) toSysLog(msg);
     _setCriticalError(true);
     stage = ConnectStage.wait;
-    _sendWorkNotify(WorkingStatChange.disconnectedOnError);
+    _sendWorkNotify(WorkingStatChange.broken);
   }
 
   _close(WorkSignals event, bool isDead) async {
@@ -284,9 +281,7 @@ abstract class TerminalClient {
         timeoutError = e;
       }
       onClose(event.error ?? timeoutError, event.type);
-      _sendWorkNotify((event.error ?? timeoutError) != null
-          ? WorkingStatChange.disconnectedOnError
-          : WorkingStatChange.disconnected);
+      _sendWorkNotify((event.error ?? timeoutError) != null ? WorkingStatChange.closeOnError : WorkingStatChange.close);
       if (event.error != null) {
         if (hasCriticalError) timeoutError = null;
         toSysLog('Connecting error: ${event.error}');
@@ -302,7 +297,7 @@ abstract class TerminalClient {
 
   void dispose() {
     _workSignal.close();
-    _workerNotifyLocal.close();
+    _stateStream.close();
     _channel?.sink?.close();
     _setCriticalError(false);
     debugPrint('DISPOSE $name');
@@ -348,10 +343,7 @@ abstract class TerminalClient {
   bool get isHandshake =>
       stage == ConnectStage.sendAuth || stage == ConnectStage.sendDuplex || stage == ConnectStage.connected;
 
-  _sendWorkNotify(WorkingStatChange signal) {
-    if (_workerNotifyGlobal.hasListener) _workerNotifyGlobal.add(WorkingNotification(server, signal));
-    if (_workerNotifyLocal.hasListener) _workerNotifyLocal.add(signal);
-  }
+  void _sendWorkNotify(WorkingStatChange signal) => _stateStream.add(WorkingNotification(server, signal));
 
   _sendAuth(String token) {
     if (server.totpSalt) {

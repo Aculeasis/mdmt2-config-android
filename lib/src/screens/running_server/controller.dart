@@ -34,7 +34,7 @@ class _ControllerViewState extends State<ControllerView> {
     super.initState();
     _isConnected = widget.control.getStage == ConnectStage.controller;
     _subscriptions['toads'] = widget.control.streamToads.listen((event) => seeOkToast(context, event));
-    _subscriptions['connected'] = widget.control.workerNotifyListen((event) {
+    _subscriptions['connected'] = widget.control.stateStream.listen((_) {
       final isConnected = widget.control.getStage == ConnectStage.controller;
       if (isConnected != _isConnected) {
         setState(() => _isConnected = isConnected);

@@ -57,6 +57,7 @@ class Log {
   final _actualLog = ListQueue<LogLine>();
   final _actualStream = BehaviorSubject<ListQueue<LogLine>>();
   final _requestsStream = StreamController<String>();
+  final _addLogLineStream = StreamController<dynamic>();
 
   LogLevel _lvl;
 
@@ -65,6 +66,14 @@ class Log {
   Log(this._style, this._unreadMessages, this._saved, String uuid) {
     _lvl = _style.lvl;
     _style.addListener(_setLvl);
+    _addLogLineStream.stream.listen((dynamic line) {
+      if (line is LogLine) {
+        _fileLog?.writeLine(jsonEncode(line));
+        _add(line);
+      } else {
+        _addFromJson(line);
+      }
+    });
     _requestsStream.stream.listen((cmd) {
       if (cmd == 'clear') {
         _clearInput();
@@ -88,7 +97,7 @@ class Log {
   _restore() {
     int counts = 0;
     _fileLog.readAll().listen((line) {
-      addFromJson(line, isRestore: true);
+      _addFromJson(line, isRestore: true);
       counts++;
     }, onError: (e) {
       _restoreFinished(counts);
@@ -102,6 +111,7 @@ class Log {
   }
 
   void dispose() {
+    _addLogLineStream.close();
     _requestsStream.close();
     _actualStream.close();
     _style.removeListener(_setLvl);
@@ -123,6 +133,9 @@ class Log {
   }
 
   void clear() => _requestsStream.add('clear');
+  void addFromJson(dynamic line) => _addLogLineStream.add(line);
+  void addSystem(String msg, {List<String> callers}) =>
+      _addLogLineStream.add(LogLine(callers, msg, LogLevel.system, DateTime.now()));
 
   _setLvl() {
     if (_style.lvl != _lvl) {
@@ -149,7 +162,7 @@ class Log {
     return _addActual(line, isRestore);
   }
 
-  bool addFromJson(dynamic line, {isRestore = false}) {
+  bool _addFromJson(dynamic line, {isRestore = false}) {
     LogLine logLine;
     try {
       logLine = LogLine.fromJson(jsonDecode(line));
@@ -159,12 +172,6 @@ class Log {
       if (!isRestore) _fileLog?.writeLine(jsonEncode(logLine));
     }
     return _add(logLine, isRestore: isRestore);
-  }
-
-  bool addSystem(String msg, {List<String> callers}) {
-    final logLine = LogLine(callers, msg, LogLevel.system, DateTime.now());
-    _fileLog?.writeLine(jsonEncode(logLine));
-    return _add(logLine);
   }
 
   _rebuildActual() => _actualLog
