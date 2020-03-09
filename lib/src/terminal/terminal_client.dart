@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
+
 import 'dart:math' as math;
 
 import 'package:crypto/crypto.dart';
@@ -16,7 +18,7 @@ const mDuplex = 'upgrade duplex';
 
 const DEEP_DEBUG = false;
 
-enum ConnectStage { wait, blocked, connected, sendAuth, sendDuplex, logger, controller, happy, closing }
+enum ConnectStage { wait, connected, connecting, sendAuth, sendDuplex, logger, controller, happy, closing }
 
 enum WorkingStatChange { connecting, connected, closing, disconnected, disconnectedOnError }
 
@@ -128,7 +130,8 @@ class AsyncResponseHandler {
 }
 
 abstract class TerminalClient {
-  static const TIMEOUT = 30;
+  static const connectLimit = 10;
+  static const closeLimit = 10;
   final StreamController<WorkingNotification> _workerNotifyGlobal;
   final StreamController<WorkingStatChange> _workerNotifyLocal = StreamController<WorkingStatChange>.broadcast();
   final StreamController<WorkSignals> _workSignal = StreamController<WorkSignals>();
@@ -168,6 +171,7 @@ abstract class TerminalClient {
   TerminalClient(this.server, this.mode, this._workerNotifyGlobal, this._saved, this.name, {this.log}) {
     _restoreCriticalError();
     _workSignal.stream.listen((event) {
+      if (stage == ConnectStage.connecting) return;
       if (event.type == WorkSignalsType.close || event.type == WorkSignalsType.selfClose) {
         // уже закрыли или закрываем
         if (isClosing)
@@ -182,8 +186,8 @@ abstract class TerminalClient {
       if (!isClosing)
         return;
       else {
-        stage = ConnectStage.blocked;
-        _run();
+        stage = ConnectStage.connecting;
+        _runInput();
       }
     });
     void _criticalError(String method, Error error) =>
@@ -225,21 +229,19 @@ abstract class TerminalClient {
   // Запускаем сокет, если он еще не запущен
   sendRun() => _workSignal.add(WorkSignals(WorkSignalsType.run, null, false));
 
-  _run() {
+  _runInput() async {
     _setCriticalError(false);
     _sendWorkNotify(WorkingStatChange.connecting);
     toSysLog('Start connecting to ${server.uri}...');
+    _channel = null;
+    final limit = Duration(seconds: connectLimit);
     try {
-      _channel = IOWebSocketChannel.connect(
-        'ws://${server.uri}',
-      );
+      _channel = IOWebSocketChannel(await WebSocket.connect('ws://${server.uri}').timeout(limit));
+    } on TimeoutException {
+      return _connectingError('Connecting timeout ($connectLimit seconds).');
     } catch (e) {
-      stage = ConnectStage.happy;
-      sendSelfClose(error: e, isDead: true);
-      toSysLog('Internal Error! $e');
-      return;
+      return _connectingError('Connecting Error: "$e"!');
     }
-    stage = ConnectStage.connected;
     _listener = _channel.stream.listen((dynamic message) {
       _parse(message);
       pPrint('recived $message');
@@ -252,6 +254,7 @@ abstract class TerminalClient {
     }, cancelOnError: true // cancelOnError
         );
 
+    stage = ConnectStage.connected;
     if (server.wsToken != '') _send(server.wsToken);
     if (server.token != '') {
       stage = ConnectStage.sendAuth;
@@ -259,6 +262,13 @@ abstract class TerminalClient {
     } else {
       _sendPostAuth();
     }
+  }
+
+  void _connectingError(String msg) {
+    if (msg != null) toSysLog(msg);
+    _setCriticalError(true);
+    stage = ConnectStage.wait;
+    _sendWorkNotify(WorkingStatChange.disconnectedOnError);
   }
 
   _close(WorkSignals event, bool isDead) async {
@@ -269,7 +279,7 @@ abstract class TerminalClient {
       _sendWorkNotify(WorkingStatChange.closing);
       dynamic timeoutError;
       try {
-        await _close(status.normalClosure).timeout(Duration(seconds: isDead ? 1 : TIMEOUT));
+        await _close(status.normalClosure).timeout(Duration(seconds: isDead ? 1 : closeLimit));
       } on TimeoutException catch (e) {
         timeoutError = e;
       }
@@ -282,13 +292,13 @@ abstract class TerminalClient {
         toSysLog('Connecting error: ${event.error}');
       }
       String msg = 'Connection close';
-      if (timeoutError != null) msg = '$msg by timeout(${TerminalClient.TIMEOUT} sec, socket stuck)';
+      if (timeoutError != null) msg = '$msg by timeout(${TerminalClient.closeLimit} sec, socket stuck)';
       toSysLog('$msg.');
     }
     stage = ConnectStage.wait;
   }
 
-  bool get isClosing => stage == ConnectStage.wait || stage == ConnectStage.closing || stage == ConnectStage.blocked;
+  bool get isClosing => stage == ConnectStage.wait || stage == ConnectStage.closing;
 
   void dispose() {
     _workSignal.close();
