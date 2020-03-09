@@ -1,8 +1,8 @@
+import 'dart:collection';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:mdmt2_config/src/misc.dart';
 import 'package:mdmt2_config/src/screens/running_server/controller.dart';
 import 'package:mdmt2_config/src/servers/server_data.dart';
 import 'package:mdmt2_config/src/settings/log_style.dart';
@@ -42,7 +42,7 @@ class _RunningServerPage extends State<RunningServerPage> with SingleTickerProvi
     if (_instance == null) {
       _tabController = TabController(length: 2, vsync: this, initialIndex: 0);
     } else {
-      int initialIndex = _instance.view.pageIndex.value;
+      int initialIndex = _instance.view.states['pageIndex'].value;
       if (initialIndex == 0 && _instance.log == null)
         initialIndex = 1;
       else if (initialIndex == 1 && _instance.control == null) initialIndex = 0;
@@ -71,7 +71,7 @@ class _RunningServerPage extends State<RunningServerPage> with SingleTickerProvi
   }
 
   _tabControllerListener() {
-    _instance?.view?.pageIndex?.value = _tabController.index;
+    _instance?.view?.states['pageIndex']?.value = _tabController.index;
   }
 
   @override
@@ -111,10 +111,11 @@ class _RunningServerPage extends State<RunningServerPage> with SingleTickerProvi
       IconButton(
         icon: Icon(Icons.import_export),
         onPressed: () {
-          final index = _instance?.view?.pageIndex?.value;
+          final index = _instance?.view?.states['pageIndex']?.value;
           if (index == 0)
-            _instance.view.logExpanded.value = !_instance.view.logExpanded.value;
-          else if (index == 1) _instance.view.controlExpanded.value = !_instance.view.controlExpanded.value;
+            _instance.view.states['logExpanded'].value = !_instance.view.states['logExpanded'].value;
+          else if (index == 1)
+            _instance.view.states['controlExpanded'].value = !_instance.view.states['controlExpanded'].value;
         },
       ),
     ];
@@ -125,11 +126,11 @@ class _RunningServerPage extends State<RunningServerPage> with SingleTickerProvi
       children: <Widget>[
         Container(
           constraints: BoxConstraints.expand(),
-          child: log != null ? LogListView(log, instance.view, instance.view.unreadMessages) : _disabledBody(),
+          child: log != null ? LogListView(log, instance.view) : _disabledBody(),
         ),
         if (instance != null)
           ValueListenableBuilder(
-              valueListenable: instance.view.logExpanded,
+              valueListenable: instance.view.states['logExpanded'],
               builder: (_, expanded, child) => expanded ? child : SizedBox(),
               child: Container(
                 color: Colors.black.withOpacity(.5),
@@ -144,7 +145,7 @@ class _RunningServerPage extends State<RunningServerPage> with SingleTickerProvi
       children: <Widget>[
         if (instance != null)
           ValueListenableBuilder(
-            valueListenable: instance.view.controlExpanded,
+            valueListenable: instance.view.states['controlExpanded'],
             builder: (_, expanded, child) => !expanded
                 ? child
                 : Expanded(
@@ -168,7 +169,7 @@ class _RunningServerPage extends State<RunningServerPage> with SingleTickerProvi
                 _loggerSettings1(view.style),
                 _loggerSettings2(view.style),
                 Divider(),
-                _loggerSettings3(log, view.unreadMessages),
+                _loggerSettings3(log),
                 Divider()
               ],
             ));
@@ -207,18 +208,18 @@ class _RunningServerPage extends State<RunningServerPage> with SingleTickerProvi
     );
   }
 
-  Widget _loggerSettings3(Log log, UnreadMessages unreadMessages) {
+  Widget _loggerSettings3(Log log) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       verticalDirection: VerticalDirection.down,
       children: <Widget>[
-        ValueListenableBuilder(
-          valueListenable: unreadMessages,
-          builder: (_, __, ___) => _loggerFlatButton(
-            'Clear log',
-            log.isNotEmpty ? log.clear : null,
-          ),
-        )
+        StreamBuilder<ListQueue<LogLine>>(
+            initialData: log?.give(),
+            stream: log.actualLog,
+            builder: (_, event) => _loggerFlatButton(
+                  'Clear log',
+                  event.data?.isNotEmpty == true ? log?.clear : null,
+                )),
       ],
     );
   }
@@ -311,9 +312,8 @@ class _RunningServerPage extends State<RunningServerPage> with SingleTickerProvi
 class LogListView extends StatefulWidget {
   final Log log;
   final InstanceViewState view;
-  final ValueNotifier<int> unreadMessages;
 
-  LogListView(this.log, this.view, this.unreadMessages, {Key key}) : super(key: key);
+  LogListView(this.log, this.view, {Key key}) : super(key: key);
 
   @override
   _LogListViewState createState() => _LogListViewState();
@@ -342,7 +342,8 @@ class _LogListViewState extends State<LogListView> with SingleTickerProviderStat
         reverseDuration: InstanceViewState.fadeOutButtonTime);
     _animation = CurvedAnimation(parent: _animationController, curve: Curves.linear, reverseCurve: Curves.linear);
 
-    _logScroll = ScrollController(initialScrollOffset: widget.view.logScrollPosition, keepScrollOffset: false);
+    _logScroll =
+        ScrollController(initialScrollOffset: widget.view.states['logScrollPosition'].value, keepScrollOffset: false);
     WidgetsBinding.instance.addPostFrameCallback((_) => widget.view.scrollCallback(_logScroll));
     _logScroll.addListener(() => widget.view.scrollCallback(_logScroll));
   }
@@ -380,6 +381,61 @@ class _LogListViewState extends State<LogListView> with SingleTickerProviderStat
     return false;
   }
 
+  Widget _logBody(ListQueue<LogLine> data) => ListView.builder(
+      controller: _logScroll,
+      reverse: true,
+      shrinkWrap: true,
+      itemCount: data.length,
+      padding: EdgeInsets.zero,
+      itemBuilder: (context, i) {
+        if (i >= data.length) return null;
+        final target = data.elementAt(i);
+        Widget line = _buildLogLineView(widget.view.style, target);
+        if (i + 1 == data.length || _timeUp(data.elementAt(i + 1).time, target.time))
+          line = _newDayLine(line, target.time);
+        return i == 0
+            ? Padding(
+                padding: EdgeInsets.only(bottom: 15),
+                child: line,
+              )
+            : line;
+      });
+
+  Widget _backButton() => Align(
+        alignment: Alignment.bottomRight,
+        child: ValueListenableBuilder<ButtonDisplaySignal>(
+          valueListenable: widget.view.backButton,
+          builder: (_, status, child) {
+            switch (status) {
+              case ButtonDisplaySignal.hide:
+                _animationController.reset();
+                return SizedBox();
+              case ButtonDisplaySignal.fadeIn:
+                _animationController.forward();
+                return child;
+              case ButtonDisplaySignal.fadeOut:
+                _animationController.reverse();
+                return child;
+            }
+            return SizedBox();
+          },
+          child: Padding(
+            padding: EdgeInsets.all(10),
+            child: FadeTransition(
+                opacity: _animation,
+                child: FloatingActionButton(
+                  backgroundColor: Theme.of(context).highlightColor,
+                  foregroundColor: LogStyle.backgroundColor.withOpacity(.75),
+                  onPressed: () => widget.view.scrollBack(_logScroll),
+                  child: Transform.rotate(
+                    angle: math.pi,
+                    child: Icon(Icons.navigation),
+                  ),
+                )),
+          ),
+        ),
+      );
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -390,69 +446,17 @@ class _LogListViewState extends State<LogListView> with SingleTickerProviderStat
             child: Stack(
               fit: StackFit.expand,
               children: <Widget>[
-                ValueListenableBuilder(
-                    valueListenable: widget.view.style,
-                    builder: (context, _, __) => ValueListenableBuilder(
-                        valueListenable: widget.unreadMessages,
-                        builder: (context, _, __) => Container(
-                              padding: EdgeInsets.symmetric(horizontal: 5),
-                              // Ждем пока лог загрузится из файла
-                              child: widget.log.isRestored
-                                  ? ListView.builder(
-                                      controller: _logScroll,
-                                      reverse: true,
-                                      shrinkWrap: true,
-                                      itemCount: widget.log.length,
-                                      padding: EdgeInsets.zero,
-                                      itemBuilder: (context, i) {
-                                        if (i >= widget.log.length) return null;
-                                        Widget line = _buildLogLineView(widget.view.style, widget.log[i]);
-                                        if (i + 1 == widget.log.length ||
-                                            _timeUp(widget.log[i + 1].time, widget.log[i].time))
-                                          line = _newDayLine(line, widget.log[i].time);
-                                        return i == 0
-                                            ? Padding(
-                                                padding: EdgeInsets.only(bottom: 15),
-                                                child: line,
-                                              )
-                                            : line;
-                                      })
-                                  : SizedBox(),
-                            ))),
-                Align(
-                  alignment: Alignment.bottomRight,
-                  child: ValueListenableBuilder<ButtonDisplaySignal>(
-                    valueListenable: widget.view.backButton,
-                    builder: (_, status, child) {
-                      switch (status) {
-                        case ButtonDisplaySignal.hide:
-                          _animationController.reset();
-                          return SizedBox();
-                        case ButtonDisplaySignal.fadeIn:
-                          _animationController.forward();
-                          return child;
-                        case ButtonDisplaySignal.fadeOut:
-                          _animationController.reverse();
-                          return child;
-                      }
-                      return SizedBox();
-                    },
-                    child: Padding(
-                      padding: EdgeInsets.all(10),
-                      child: FadeTransition(
-                          opacity: _animation,
-                          child: FloatingActionButton(
-                            backgroundColor: Theme.of(context).highlightColor,
-                            foregroundColor: LogStyle.backgroundColor.withOpacity(.75),
-                            onPressed: () => widget.view.scrollBack(_logScroll),
-                            child: Transform.rotate(
-                              angle: math.pi,
-                              child: Icon(Icons.navigation),
-                            ),
-                          )),
-                    ),
-                  ),
-                )
+                Container(
+                  padding: EdgeInsets.symmetric(horizontal: 5),
+                  child: StreamBuilder<ListQueue<LogLine>>(
+                      initialData: widget.log?.give(),
+                      stream: widget.log?.actualLog,
+                      builder: (_, event) => event.connectionState == ConnectionState.active && event.data != null
+                          ? ValueListenableBuilder(
+                              valueListenable: widget.view.style, builder: (_, __, ___) => _logBody(event.data))
+                          : SizedBox()),
+                ),
+                _backButton()
               ],
             )),
       ),

@@ -172,7 +172,7 @@ class _ControllerViewState extends State<ControllerView> {
                 child: Text('Restore*'),
               )),
       SizedBox(),
-      _radioButton(widget.view.catchQryStatus, label: 'QRY', callBack: () => widget.control.executeMe('qry')),
+      _radioButton(widget.view.states['catchQryStatus'], label: 'QRY', callBack: () => widget.control.executeMe('qry')),
       SizedBox(),
       SizedBox(), //
     ]);
@@ -268,9 +268,9 @@ class _ControllerViewState extends State<ControllerView> {
                 child: RaisedButton(
                     onPressed: enable
                         ? () {
-                            uriDialog(context, widget.view.musicURI).then((value) {
+                            uriDialog(context, widget.view.states['musicURI'].value).then((value) {
                               if (value == null) return;
-                              widget.view.musicURI = value;
+                              widget.view.states['musicURI'].value = value;
                               if (_isConnected) widget.control.executeMe('play', data: value);
                             });
                           }
@@ -304,24 +304,25 @@ class _ControllerViewState extends State<ControllerView> {
           builder: (_, busy, __) => RaisedButton(
               child: Text('Compile'),
               onPressed: _isConnected && !busy
-                  ? () => widget.control.executeMe('rec', data: 'compile_${widget.view.modelIndex.value}_0')
+                  ? () => widget.control.executeMe('rec', data: 'compile_${widget.view.states['modelIndex'].value}_0')
                   : null)),
       SizedBox(),
       RaisedButton(
           child: Text('Remove'),
           onPressed: _isConnected
-              ? () => dialogYesNo(context, 'Remove model #${widget.view.modelIndex.value}?', '', 'Remove', 'Cancel')
+              ? () => dialogYesNo(
+                          context, 'Remove model #${widget.view.states['modelIndex'].value}?', '', 'Remove', 'Cancel')
                       .then((value) {
-                    if (value) widget.control.executeMe('rec', data: 'del_${widget.view.modelIndex.value}_0');
+                    if (value) widget.control.executeMe('rec', data: 'del_${widget.view.states['modelIndex'].value}_0');
                   })
               : null),
       SizedBox(),
-      dropdownButtonInt(widget.view.modelIndex, 6)
+      dropdownButtonInt(widget.view.states['modelIndex'], 6)
     ]);
   }
 
   TableRow makeSampleLine() {
-    String target() => '${widget.view.modelIndex.value}_${widget.view.sampleIndex.value}';
+    String target() => '${widget.view.states['modelIndex'].value}_${widget.view.states['sampleIndex'].value}';
     return TableRow(children: [
       Text('Sample:'),
       ValueListenableBuilder(
@@ -335,7 +336,7 @@ class _ControllerViewState extends State<ControllerView> {
           child: Text('Play'),
           onPressed: _isConnected ? () => widget.control.executeMe('rec', data: 'play_${target()}') : null),
       SizedBox(),
-      dropdownButtonInt(widget.view.sampleIndex, 3),
+      dropdownButtonInt(widget.view.states['sampleIndex'], 3),
     ]);
   }
 
@@ -489,15 +490,19 @@ class FieldForTAVLine extends StatefulWidget {
 
 class _FieldForTAVLineState extends State<FieldForTAVLine> {
   TextEditingController _controller;
+  ValueNotifier<String> _modeTAV;
+  ValueNotifier<String> _textTAV;
 
   @override
   void initState() {
     super.initState();
-    _controller = TextEditingController(text: widget.state.textTAV);
+    _modeTAV = widget.state.states['modeTAV'];
+    _textTAV = widget.state.states['textTAV'];
+    _controller = TextEditingController(text: _textTAV.value);
     _controller.addListener(() {
-      if (_controller.text == widget.state.textTAV) return;
-      final reBuild = widget.state.modeTAV != 'VOICE' && (_controller.text == '' || widget.state.textTAV == '');
-      widget.state.textTAV = _controller.text;
+      if (_controller.text == _textTAV.value) return;
+      final reBuild = _modeTAV.value != 'VOICE' && (_controller.text == '' || _textTAV.value == '');
+      _textTAV.value = _controller.text;
       if (reBuild) setState(() {});
     });
   }
@@ -509,14 +514,13 @@ class _FieldForTAVLineState extends State<FieldForTAVLine> {
   }
 
   _send() {
-    widget.onSend(widget.state.modeTAV, widget.state.textTAV);
-    if (widget.state.modeTAV != 'VOICE') _controller.text = '';
+    widget.onSend(_modeTAV.value, _textTAV.value);
+    if (_modeTAV.value != 'VOICE') _controller.text = '';
   }
 
   @override
   Widget build(BuildContext context) {
-    final toSend =
-        !widget.isConnected || (widget.state.modeTAV != 'VOICE' && widget.state.textTAV == '') ? null : _send;
+    final toSend = !widget.isConnected || (_modeTAV.value != 'VOICE' && _textTAV.value == '') ? null : _send;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
@@ -538,8 +542,8 @@ class _FieldForTAVLineState extends State<FieldForTAVLine> {
                     child: Text(value.length < 5 ? '  $value' : value),
                   );
                 }).toList(),
-                value: widget.state.modeTAV,
-                onChanged: (val) => setState(() => widget.state.modeTAV = val),
+                value: _modeTAV.value,
+                onChanged: (val) => setState(() => _modeTAV.value = val),
               ),
             )),
         Expanded(
@@ -549,7 +553,7 @@ class _FieldForTAVLineState extends State<FieldForTAVLine> {
             onEditingComplete: toSend,
             autofocus: false,
             controller: _controller,
-            enabled: widget.state.modeTAV != 'VOICE' && widget.isConnected,
+            enabled: _modeTAV.value != 'VOICE' && widget.isConnected,
           ),
         ),
         IconButton(

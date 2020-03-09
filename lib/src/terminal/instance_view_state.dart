@@ -11,117 +11,88 @@ enum MusicStatus { play, pause, stop, nope, error }
 
 class _N {
   static const unreadMessages = '1';
-  static const logExpanded = '2';
-  static const controlExpanded = '3';
-  static const pageIndex = '4';
-  static const logScrollPosition = '5';
-  static const modeTAV = '6';
-  static const textTAV = '7';
-  static const modelIndex = '8';
-  static const sampleIndex = '9';
-  static const catchQryStatus = '10';
-  static const musicURI = '11';
-  static const style = '12';
+  static const style = '2';
 }
 
 class _MainStates {
   final _removeListeners = <Function>[];
   final SavedStateData _saved;
+  // Стиль инста
   final LogStyle style;
   // Счетчик + уведомления о изменении сообщений в логе
   final unreadMessages = UnreadMessages(0);
-  // Настройки логгера открыты
-  final logExpanded = ValueNotifier<bool>(false);
-  // Настройки контроллера открыты
-  final controlExpanded = ValueNotifier<bool>(false);
-  // Открытый таб (логгер или контроллер)
-  final pageIndex = ValueNotifier<int>(0);
-  // model
-  final modelIndex = ValueNotifier<int>(1);
-  final sampleIndex = ValueNotifier<int>(1);
-  // Перехват сообщения для сервера (command.php?qry=)
-  final catchQryStatus = ValueNotifier<bool>(false);
-  // Позиция скрола логгера
-  double _logScrollPosition = .0;
-  double get logScrollPosition => _logScrollPosition;
-  set logScrollPosition(double value) {
-    _logScrollPosition = value;
-    _saved?.putDouble(_N.logScrollPosition, value);
+
+  final Map<String, ValueNotifier> states = {
+    // Настройки логгера открыты
+    'logExpanded': ValueNotifier<bool>(false),
+    // Настройки контроллера открыты
+    'controlExpanded': ValueNotifier<bool>(false),
+    // Открытый таб (логгер или контроллер)
+    'pageIndex': ValueNotifier<int>(0),
+    // model
+    'modelIndex': ValueNotifier<int>(1),
+    'sampleIndex': ValueNotifier<int>(1),
+    // Перехват сообщения для сервера (command.php?qry=)
+    'catchQryStatus': ValueNotifier<bool>(false),
+    // Позиция скрола логгера
+    'logScrollPosition': ValueNotifier<double>(.0),
+    // TTS, ask, voice
+    'modeTAV': ValueNotifier<String>('TTS'),
+    'textTAV': ValueNotifier<String>('Hello world!'),
+    // play:uri
+    'musicURI': ValueNotifier<String>(''),
+  };
+
+  _addListener(String key, ValueNotifier notifier) {
+    Function cb = () => null;
+    if (notifier is LogStyle) {
+      cb = () => _saved?.putString(key, jsonEncode(notifier));
+    } else if (notifier is ValueNotifier<String>) {
+      cb = () => _saved?.putString(key, notifier.value);
+    } else if (notifier is ValueNotifier<int>) {
+      cb = () => _saved?.putInt(key, notifier.value);
+    } else if (notifier is ValueNotifier<bool>) {
+      cb = () => _saved?.putBool(key, notifier.value);
+    } else if (notifier is ValueNotifier<double>) {
+      cb = () => _saved?.putDouble(key, notifier.value);
+    } else {
+      assert(() {
+        throw 'FIXME! Unknown type of key "$key"';
+      }());
+    }
+    notifier.addListener(cb);
+    _removeListeners.add(() => notifier.removeListener(cb));
   }
 
-  // TTS, ask, voice
-  String _modeTAV = 'TTS';
-  String get modeTAV => _modeTAV;
-  set modeTAV(String value) {
-    _modeTAV = value;
-    _saved?.putString(_N.modeTAV, value);
-  }
-
-  String _textTAV = 'Hello world!';
-  String get textTAV => _textTAV;
-  set textTAV(String value) {
-    _textTAV = value;
-    _saved?.putString(_N.textTAV, value);
-  }
-
-  // play:uri
-  String _musicURI = '';
-  String get musicURI => _musicURI;
-  set musicURI(String value) {
-    _musicURI = value;
-    _saved?.putString(_N.musicURI, value);
+  _restoreNotifier(String key, ValueNotifier notifier) {
+    if (notifier is LogStyle) {
+      notifier.upgradeFromJson(_saved.getString(key));
+    } else if (notifier is ValueNotifier<String>) {
+      notifier.value = _saved.getString(key) ?? notifier.value;
+    } else if (notifier is ValueNotifier<int>) {
+      notifier.value = _saved.getInt(key) ?? notifier.value;
+    } else if (notifier is ValueNotifier<bool>) {
+      notifier.value = _saved.getBool(key) ?? notifier.value;
+    } else if (notifier is ValueNotifier<double>) {
+      notifier.value = _saved.getDouble(key) ?? notifier.value;
+    } else {
+      assert(() {
+        throw 'FIXME! Unknown type of key "$key"';
+      }());
+    }
   }
 
   _addListeners() {
     _saved.putBool('flag', true);
-
-    final cb1 = () => _saved.putInt(_N.unreadMessages, unreadMessages.value);
-    unreadMessages.addListener(cb1);
-    _removeListeners.add(() => unreadMessages.removeListener(cb1));
-
-    final cb2 = () => _saved.putBool(_N.logExpanded, logExpanded.value);
-    logExpanded.addListener(cb2);
-    _removeListeners.add(() => logExpanded.removeListener(cb2));
-
-    final cb3 = () => _saved.putBool(_N.controlExpanded, controlExpanded.value);
-    controlExpanded.addListener(cb3);
-    _removeListeners.add(() => controlExpanded.removeListener(cb3));
-
-    final cb4 = () => _saved.putInt(_N.pageIndex, pageIndex.value);
-    pageIndex.addListener(cb4);
-    _removeListeners.add(() => pageIndex.removeListener(cb4));
-
-    final cb5 = () => _saved.putInt(_N.modelIndex, modelIndex.value);
-    modelIndex.addListener(cb5);
-    _removeListeners.add(() => modelIndex.removeListener(cb5));
-
-    final cb6 = () => _saved.putInt(_N.sampleIndex, sampleIndex.value);
-    sampleIndex.addListener(cb6);
-    _removeListeners.add(() => sampleIndex.removeListener(cb6));
-
-    final cb7 = () => _saved.putBool(_N.catchQryStatus, catchQryStatus.value);
-    catchQryStatus.addListener(cb7);
-    _removeListeners.add(() => catchQryStatus.removeListener(cb7));
-
-    final cb8 = () => _saved.putString(_N.style, jsonEncode(style));
-    style.addListener(cb8);
-    _removeListeners.add(() => style.removeListener(cb8));
+    _addListener(_N.style, style);
+    _addListener(_N.unreadMessages, unreadMessages);
+    states.forEach((key, value) => _addListener(key, value));
   }
 
   _restore() {
-    unreadMessages.value = _saved.getInt(_N.unreadMessages) ?? unreadMessages.value;
-    logExpanded.value = _saved.getBool(_N.logExpanded) ?? logExpanded.value;
-    controlExpanded.value = _saved.getBool(_N.controlExpanded) ?? controlExpanded.value;
-    pageIndex.value = _saved.getInt(_N.pageIndex) ?? pageIndex.value;
-    modelIndex.value = _saved.getInt(_N.modelIndex) ?? modelIndex.value;
-    sampleIndex.value = _saved.getInt(_N.sampleIndex) ?? sampleIndex.value;
-    catchQryStatus.value = _saved.getBool(_N.catchQryStatus) ?? catchQryStatus.value;
-    style.upgradeFromJson(_saved.getString(_N.style));
-
-    _logScrollPosition = _saved.getDouble(_N.logScrollPosition) ?? _logScrollPosition;
-    _modeTAV = _saved.getString(_N.modeTAV) ?? _modeTAV;
-    _textTAV = _saved.getString(_N.textTAV) ?? _textTAV;
-    _musicURI = _saved.getString(_N.musicURI) ?? _musicURI;
+    _restoreNotifier(_N.style, style);
+    _restoreNotifier(_N.unreadMessages, unreadMessages);
+    states.forEach((key, value) => _restoreNotifier(key, value));
   }
 
   _MainStates(this.style, this._saved, bool restore) {
@@ -180,6 +151,7 @@ class InstanceViewState extends _MainStates {
     assert(() {
       Timer(Duration(seconds: 2), () {
         for (var btn in buttons.values) assert(!btn.hasListeners); // ignore: invalid_use_of_protected_member
+        for (var state in states.values) assert(!state.hasListeners); // ignore: invalid_use_of_protected_member
         assert(!unreadMessages.hasListeners); // ignore: invalid_use_of_protected_member
         assert(!backButton.hasListeners); // ignore: invalid_use_of_protected_member
         assert(!listenerOnOff.hasListeners); // ignore: invalid_use_of_protected_member
@@ -187,12 +159,6 @@ class InstanceViewState extends _MainStates {
         assert(!volume.hasListeners); // ignore: invalid_use_of_protected_member
         assert(!musicVolume.hasListeners); // ignore: invalid_use_of_protected_member
         assert(!style.hasListeners); // ignore: invalid_use_of_protected_member
-        assert(!logExpanded.hasListeners); // ignore: invalid_use_of_protected_member
-        assert(!controlExpanded.hasListeners); // ignore: invalid_use_of_protected_member
-        assert(!pageIndex.hasListeners); // ignore: invalid_use_of_protected_member
-        assert(!modelIndex.hasListeners); // ignore: invalid_use_of_protected_member
-        assert(!sampleIndex.hasListeners); // ignore: invalid_use_of_protected_member
-        assert(!catchQryStatus.hasListeners); // ignore: invalid_use_of_protected_member
         debugPrint('InstanceViewState ---- OK!');
       });
       return true;
@@ -203,8 +169,8 @@ class InstanceViewState extends _MainStates {
       sc.animateTo(sc.position.minScrollExtent, duration: Duration(milliseconds: 200), curve: Curves.easeOut);
 
   void scrollCallback(ScrollController sc) {
-    if (!sc.hasClients || logScrollPosition == sc.offset) return;
-    logScrollPosition = sc.offset;
+    if (!sc.hasClients || states['logScrollPosition'].value == sc.offset) return;
+    states['logScrollPosition'].value = sc.offset;
     final isVisible = sc.offset > backIndent && sc.position.maxScrollExtent - sc.offset > backIndent;
     if (isVisible) {
       _stopAnimation();

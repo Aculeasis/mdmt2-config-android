@@ -97,7 +97,7 @@ class TerminalControl extends TerminalClient {
             for (String cmd in subscribeTo) addRequestHandler('notify.$cmd', _handleNotify);
           }
         }, null));
-    if (view.catchQryStatus.value) _cmdSubscriber(true);
+    if (view.states['catchQryStatus'].value) _cmdSubscriber(true);
   }
 
   void _cmdSubscriber(bool subscribe) {
@@ -110,7 +110,7 @@ class TerminalControl extends TerminalClient {
               addRequestHandler('notify.cmd', _handleNotify);
             else
               removeRequestHandler('notify.cmd');
-            view.catchQryStatus.value = subscribe;
+            view.states['catchQryStatus'].value = subscribe;
           }
         }, null));
   }
@@ -121,7 +121,7 @@ class TerminalControl extends TerminalClient {
 
   void _externalCMD(String cmd, dynamic data) {
     if (cmd == 'qry') {
-      _cmdSubscriber(!view.catchQryStatus.value);
+      _cmdSubscriber(!view.states['catchQryStatus'].value);
       return;
     }
 

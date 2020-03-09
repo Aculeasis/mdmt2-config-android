@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
 
@@ -53,15 +54,26 @@ class Log {
   static const maxLength = 1000;
   final _log = ListQueue<LogLine>();
   final _actualLog = ListQueue<LogLine>();
-  bool isRestored = false;
+  final _actualStream = StreamController<ListQueue<LogLine>>.broadcast();
+  final _requestsStream = StreamController<String>();
 
   LogLevel _lvl;
+
+  Stream<ListQueue<LogLine>> get actualLog => _actualStream.stream;
 
   Log(this._style, this._unreadMessages, this._saved, String uuid) {
     _lvl = _style.lvl;
     _style.addListener(_setLvl);
+    _requestsStream.stream.listen((cmd) {
+      if (cmd == 'clear') {
+        _clearInput();
+      } else if (cmd == 'give') {
+        _actualStream.add(_actualLog);
+      } else {
+        debugPrint('"$cmd"? WTF?');
+      }
+    });
     if (_saved == null) {
-      isRestored = true;
       return;
     }
     final restore = _saved.getBool(logFlag) == true;
@@ -70,12 +82,8 @@ class Log {
       _saved.putBool(logFlag, true);
       _fileLog.maxLineCount = maxLength;
       _fileLog.maxDirty = (maxLength / 10).truncate();
-      if (restore)
-        _restore();
-      else
-        isRestored = true;
-    } else
-      isRestored = true;
+      if (restore) _restore();
+    }
   }
 
   _restore() {
@@ -91,34 +99,38 @@ class Log {
 
   _restoreFinished(int counts) {
     debugPrint(' * Restore $counts logline from ${_fileLog.path}');
-    isRestored = true;
-    _unreadMessages.notifyListeners();
+    if (_actualLog.isNotEmpty) _actualStream.add(_actualLog);
   }
 
   void dispose() {
-    debugPrint('DISPOSE LOG');
+    _requestsStream.close();
+    _actualStream.close();
     _style.removeListener(_setLvl);
     _unreadMessages.messagesRead();
     _saved?.remove(logFlag);
     _fileLog?.dispose();
+    debugPrint('DISPOSE LOG');
   }
 
-  LogLine operator [](int index) => _actualLog.elementAt(index);
-  int get length => _actualLog.length;
   bool get isNotEmpty => _actualLog.length > 0;
 
-  void clear() {
+  void _clearInput() {
     if (!isNotEmpty) return;
     _log.clear();
     _actualLog.clear();
     _fileLog?.clear();
     _unreadMessages.messagesClear();
+    _actualStream.add(_actualLog);
   }
+
+  void clear() => _requestsStream.add('clear');
+  give() => _requestsStream.add('give');
 
   _setLvl() {
     if (_style.lvl != _lvl) {
       _lvl = _style.lvl;
       _rebuildActual();
+      _actualStream.add(_actualLog);
     }
   }
 
@@ -126,7 +138,10 @@ class Log {
     if (line.lvl.index < _lvl.index) return false;
     if (_actualLog.length >= maxLength) _actualLog.removeLast();
     _actualLog.addFirst(line);
-    if (!isRestore) _unreadMessages.messagesNew();
+    if (!isRestore) {
+      _unreadMessages.messagesNew();
+      _actualStream.add(_actualLog);
+    }
     return true;
   }
 
