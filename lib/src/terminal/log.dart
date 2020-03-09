@@ -7,6 +7,7 @@ import 'package:mdmt2_config/src/misc.dart';
 import 'package:mdmt2_config/src/settings/log_style.dart';
 import 'package:mdmt2_config/src/terminal/file_logging.dart';
 import 'package:native_state/native_state.dart';
+import 'package:rxdart/rxdart.dart';
 
 enum LogLevel { debug, info, warn, error, critical, system }
 
@@ -46,15 +47,15 @@ class LogLine {
 }
 
 class Log {
+  static const maxLength = 1000;
   static const logFlag = 'log_state_restore';
   final SavedStateData _saved;
   FileLog _fileLog;
   final UnreadMessages _unreadMessages;
   final LogStyle _style;
-  static const maxLength = 1000;
   final _log = ListQueue<LogLine>();
   final _actualLog = ListQueue<LogLine>();
-  final _actualStream = StreamController<ListQueue<LogLine>>.broadcast();
+  final _actualStream = BehaviorSubject<ListQueue<LogLine>>();
   final _requestsStream = StreamController<String>();
 
   LogLevel _lvl;
@@ -67,8 +68,6 @@ class Log {
     _requestsStream.stream.listen((cmd) {
       if (cmd == 'clear') {
         _clearInput();
-      } else if (cmd == 'give') {
-        _actualStream.add(_actualLog);
       } else {
         debugPrint('"$cmd"? WTF?');
       }
@@ -124,7 +123,6 @@ class Log {
   }
 
   void clear() => _requestsStream.add('clear');
-  give() => _requestsStream.add('give');
 
   _setLvl() {
     if (_style.lvl != _lvl) {

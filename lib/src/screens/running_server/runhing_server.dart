@@ -214,7 +214,6 @@ class _RunningServerPage extends State<RunningServerPage> with SingleTickerProvi
       verticalDirection: VerticalDirection.down,
       children: <Widget>[
         StreamBuilder<ListQueue<LogLine>>(
-            initialData: log?.give(),
             stream: log.actualLog,
             builder: (_, event) => _loggerFlatButton(
                   'Clear log',
@@ -449,7 +448,6 @@ class _LogListViewState extends State<LogListView> with SingleTickerProviderStat
                 Container(
                   padding: EdgeInsets.symmetric(horizontal: 5),
                   child: StreamBuilder<ListQueue<LogLine>>(
-                      initialData: widget.log?.give(),
                       stream: widget.log?.actualLog,
                       builder: (_, event) => event.connectionState == ConnectionState.active && event.data != null
                           ? ValueListenableBuilder(
