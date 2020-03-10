@@ -18,7 +18,7 @@ const mDuplex = 'upgrade duplex';
 
 const DEEP_DEBUG = false;
 
-enum ConnectStage { wait, connected, connecting, sendAuth, sendDuplex, logger, controller, happy, closing }
+enum ConnectStage { wait, connected, connecting, sendAuth, sendDuplex, work, happy, closing }
 
 enum WorkingStatChange { connecting, broken, connected, closing, close, closeOnError }
 
@@ -132,8 +132,8 @@ class AsyncResponseHandler {
 abstract class TerminalClient {
   static const connectLimit = 10;
   static const closeLimit = 10;
-  final StreamController<WorkingNotification> _stateStream = StreamController<WorkingNotification>.broadcast();
-  final StreamController<WorkSignals> _workSignal = StreamController<WorkSignals>();
+  final _stateStream = StreamController<WorkingNotification>.broadcast();
+  final _workSignal = StreamController<WorkSignals>();
   final ServerData server;
   final WorkingMode mode;
   @protected
@@ -205,7 +205,7 @@ abstract class TerminalClient {
     addResponseHandler(mAuthorizationTOTP, handler: _authHandler, errorHandler: _criticalError);
     addResponseHandler(mDuplex, handler: (method, response) {
       if (stage == ConnectStage.sendDuplex) {
-        stage = ConnectStage.controller;
+        stage = ConnectStage.work;
         pPrint('Controller online: ${response.result}');
         _sendWorkNotify(WorkingStatChange.connected);
         onOk();
@@ -354,7 +354,7 @@ abstract class TerminalClient {
   }
 
   _parse(dynamic msg) async {
-    if (stage == ConnectStage.logger) {
+    if (mode == WorkingMode.logger && stage == ConnectStage.work) {
       return await onLogger(msg);
     }
     dynamic result;
@@ -424,7 +424,7 @@ abstract class TerminalClient {
     return true;
   }
 
-  Error _responseErrorProcessing(Response response, AsyncRequest asyncRequest, AsyncResponseHandler handler) {
+  static Error _responseErrorProcessing(Response response, AsyncRequest asyncRequest, AsyncResponseHandler handler) {
     String msg;
     int code = -999;
     if (response.error != null) {
@@ -455,7 +455,7 @@ abstract class TerminalClient {
       handler(request);
   }
 
-  String _requestErrorProcessing(Request request, void Function(Request) handler) {
+  static String _requestErrorProcessing(Request request, void Function(Request) handler) {
     String msg;
     if (request.method == null || request.method == '') {
       msg = 'Wrong JSON-RPC request, method missing: $request';
@@ -469,7 +469,7 @@ abstract class TerminalClient {
 
   _sendPostAuth() {
     if (mode == WorkingMode.logger) {
-      stage = ConnectStage.logger;
+      stage = ConnectStage.work;
       callJRPC('remote_log', params: ['json'], isNotify: true);
       _sendWorkNotify(WorkingStatChange.connected);
       onOk();

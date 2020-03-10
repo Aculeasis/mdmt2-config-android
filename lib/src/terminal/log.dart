@@ -27,13 +27,13 @@ class LogLine {
   final String msg;
   final LogLevel lvl;
   final DateTime time;
-  LogLine(callers, this.msg, this.lvl, this.time) : this.callers = callers ?? [];
+  LogLine(callers, this.msg, this.lvl, this.time) : this.callers = callers ?? List(0);
 
   LogLine.fromJson(Map<String, dynamic> json)
-      : callers = List<String>.from(json['callers']) ?? [],
-        msg = json['msg'],
-        lvl = _logLvlMap[json['lvl']],
-        time = timeToDateTime(json['time']);
+      : callers = List<String>.from(json['callers'], growable: false) ?? List(0),
+        msg = notNull(json['msg'], 'msg'),
+        lvl = _logLvlMap[notNull(json['lvl'], 'lvl')],
+        time = timeToDateTime(notNull(json['time'], 'time'));
 
   Map<String, dynamic> toJson() => {
         'callers': callers,
@@ -44,6 +44,7 @@ class LogLine {
 
   static DateTime timeToDateTime(double time) => DateTime.fromMillisecondsSinceEpoch((time * 1000).toInt());
   static double dateTimeToTime(DateTime time) => time.toUtc().millisecondsSinceEpoch / 1000;
+  static T notNull<T>(T value, String name) => value != null ? value : throw ArgumentError.notNull(name);
 }
 
 class Log {
@@ -51,6 +52,7 @@ class Log {
   static const logFlag = 'log_state_restore';
   final SavedStateData _saved;
   FileLog _fileLog;
+  StreamSubscription<dynamic> _addLogLineSubscription;
   final UnreadMessages _unreadMessages;
   final LogStyle _style;
   final _log = ListQueue<LogLine>();
@@ -66,7 +68,7 @@ class Log {
   Log(this._style, this._unreadMessages, this._saved, String uuid) {
     _lvl = _style.lvl;
     _style.addListener(_setLvl);
-    _addLogLineStream.stream.listen((dynamic line) {
+    _addLogLineSubscription = _addLogLineStream.stream.listen((dynamic line) {
       if (line is LogLine) {
         _fileLog?.writeLine(jsonEncode(line));
         _add(line);
@@ -96,6 +98,8 @@ class Log {
 
   _restore() {
     int counts = 0;
+    assert(!_addLogLineSubscription.isPaused);
+    _addLogLineSubscription.pause();
     _fileLog.readAll().listen((line) {
       _addFromJson(line, isRestore: true);
       counts++;
@@ -106,6 +110,8 @@ class Log {
   }
 
   _restoreFinished(int counts) {
+    assert(_addLogLineSubscription.isPaused);
+    _addLogLineSubscription.resume();
     debugPrint(' * Restore $counts logline from ${_fileLog.path}');
     if (_actualLog.isNotEmpty) _actualStream.add(_actualLog);
   }

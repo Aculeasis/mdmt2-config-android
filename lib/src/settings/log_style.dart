@@ -35,7 +35,7 @@ class LogStyle extends ChangeValueNotifier {
     LogLevel.warn: TextStyle(color: Colors.yellow),
     LogLevel.error: TextStyle(color: Colors.red),
     LogLevel.critical: TextStyle(color: Colors.purpleAccent),
-    LogLevel.system: TextStyle(color: Colors.orange[900]),
+    LogLevel.system: TextStyle(color: Colors.blue),
   };
   static final callers = {
     0: TextStyle(color: Colors.cyan, fontWeight: FontWeight.w600),

@@ -142,6 +142,10 @@ class InstanceViewState extends _MainStates {
 
   void reset() {
     for (var btn in buttons.values) btn.reset();
+    listenerOnOff.value = false;
+    volume.value = -1;
+    musicVolume.value = -1;
+    musicStatus.value = MusicStatus.error;
   }
 
   void dispose() {

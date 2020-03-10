@@ -88,7 +88,7 @@ class _Controller {
 
   void initState() {
     _subscription = _control.stateStream.listen((_) {
-      isConnected = _control.getStage == ConnectStage.controller;
+      isConnected = _control.getStage == ConnectStage.work;
       _enableBackupManualSet();
       _enableUpdateSet();
       _enableRestoreSet();

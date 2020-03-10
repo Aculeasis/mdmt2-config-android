@@ -32,10 +32,10 @@ class _ControllerViewState extends State<ControllerView> {
   @override
   void initState() {
     super.initState();
-    _isConnected = widget.control.getStage == ConnectStage.controller;
+    _isConnected = widget.control.getStage == ConnectStage.work;
     _subscriptions['toads'] = widget.control.streamToads.listen((event) => seeOkToast(context, event));
     _subscriptions['connected'] = widget.control.stateStream.listen((_) {
-      final isConnected = widget.control.getStage == ConnectStage.controller;
+      final isConnected = widget.control.getStage == ConnectStage.work;
       if (isConnected != _isConnected) {
         setState(() => _isConnected = isConnected);
       }

@@ -6,7 +6,7 @@ import 'package:path_provider/path_provider.dart';
 
 class LogsBox {
   String _path;
-  final files = <String, File>{};
+  Map<String, File> _files = <String, File>{};
   Set<String> _owned = <String>{};
   static final _instance = LogsBox._();
   LogsBox._();
@@ -14,7 +14,7 @@ class LogsBox {
   factory LogsBox() => _instance;
 
   filling() async {
-    if (_owned == null) return;
+    assert(_owned != null && _files != null);
     final _f = await getTemporaryDirectory();
     final path = Directory('${_f.path}/log');
     try {
@@ -25,7 +25,7 @@ class LogsBox {
     }
     _path = path.path;
     for (var target in path.listSync()) {
-      if (target is File) files[target.path] = target;
+      if (target is File) _files[target.path] = target;
     }
   }
 
@@ -37,13 +37,14 @@ class LogsBox {
       return null;
     }
     final file = File(strPath);
-    files.remove(strPath);
+    _files?.remove(strPath);
     _owned?.add(strPath);
     return FileLog(file);
   }
 
   dispose() async {
-    for (var target in files.values) {
+    assert(_owned != null && _files != null);
+    for (var target in _files.values) {
       try {
         target.delete();
       } catch (e) {
@@ -52,8 +53,8 @@ class LogsBox {
       }
       debugPrint('* Remove ${target.path}');
     }
-    if (files.isNotEmpty) debugPrint('* Remove ${files.length} old files');
-    files.clear();
+    if (_files.isNotEmpty) debugPrint('* Remove ${_files.length} old files');
+    _files = null;
     _owned = null;
   }
 }
@@ -71,48 +72,54 @@ class FileLog {
 
   FileLog(this._file) {
     _subscription = _stream.stream.listen((line) {
+      assert(!_subscription.isPaused);
       if (line == null)
-        _clear();
+        _clearInput();
       else
-        _writeLine(line);
+        _writeLineInput(line);
     });
   }
 
   Stream<String> readAll() async* {
-    if (_ioSink != null || _subscription.isPaused) return;
+    assert(_ioSink == null && !_subscription.isPaused);
     _subscription.pause();
     if (!await _file.exists()) {
       _subscription.resume();
       return;
     }
-    for (var line in await _file.readAsLines()) {
-      if (line.isEmpty) continue;
-      _lineCount++;
-      yield line;
+    try {
+      for (var line in await _file.readAsLines()) {
+        if (line.isEmpty) continue;
+        _lineCount++;
+        yield line;
+      }
+    } finally {
+      assert(_ioSink == null && _subscription.isPaused);
+      _subscription.resume();
     }
-    _subscription.resume();
   }
 
   void writeLine(String line) => line != null ? _stream.add(line) : null;
 
-  void _writeLine(String line) async {
+  void _writeLineInput(String line) async {
     if (_ioSink == null) _openIOSink();
     _ioSink.writeln(line);
     _lineCount++;
-    if (_lineCount - maxLineCount > maxDirty) await _truncate();
+    if (_lineCount - maxLineCount > maxDirty) _truncate();
   }
 
   void clear() => _stream.add(null);
 
-  _clear() async {
-    if (_subscription.isPaused) return;
+  _clearInput() async {
     _subscription.pause();
     await _closeIOSink();
-    await __removeFile(_file);
+    if (await __removeFile(_file)) _lineCount = 0;
     _subscription.resume();
   }
 
   void dispose({bool remove = true}) async {
+    _subscription.pause();
+    await _subscription.cancel();
     await _stream.close();
     await _closeIOSink();
     try {
@@ -139,7 +146,7 @@ class FileLog {
   }
 
   _truncate() async {
-    if (_subscription.isPaused) return;
+    assert(!_subscription.isPaused);
     _subscription.pause();
     if (!await __truncate()) maxDirty = maxDirty * 2;
     _subscription.resume();
@@ -148,7 +155,7 @@ class FileLog {
   Future<bool> __truncate() async {
     int newLineCount = 0;
     int ignore = _lineCount - maxLineCount;
-    if (ignore < 1) return true;
+    assert(ignore > 0);
     debugPrint(' * File $path too big, remove $ignore lines...');
 
     final tmpFile = File('${_file.path}_tmp');
@@ -163,7 +170,7 @@ class FileLog {
     await _closeIOSink();
 
     try {
-      for (var line in _file.readAsLinesSync()) {
+      for (var line in await _file.readAsLines()) {
         if (ignore > 0) {
           ignore--;
           continue;
@@ -203,11 +210,13 @@ class FileLog {
     }
   }
 
-  __removeFile(File file) async{
+  Future<bool> __removeFile(File file) async {
     try {
-      await file?.delete();
+      if (await file?.exists() == true) await file?.delete();
     } catch (e) {
       debugPrint(' Error remove file ${file.path}:  $e');
+      return false;
     }
+    return true;
   }
 }

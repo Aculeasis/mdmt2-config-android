@@ -141,7 +141,7 @@ class TerminalControl extends TerminalClient {
     } else if (!allowEmptyCMD.contains(cmd)) {
       return _callToast('Unknown command: "$cmd"');
     }
-    if (stage == ConnectStage.controller) callJRPC(cmd, params: params);
+    if (stage == ConnectStage.work) callJRPC(cmd, params: params);
   }
 
   _addHandlers() {
@@ -239,7 +239,7 @@ class TerminalControl extends TerminalClient {
     }
   }
 
-  int _volumeSanitize(int volume) {
+  static int _volumeSanitize(int volume) {
     if (volume == null) return -1;
     if (volume < 0)
       volume = -1;
@@ -247,7 +247,7 @@ class TerminalControl extends TerminalClient {
     return volume;
   }
 
-  MusicStatus _mStateSanitize(String mState) => musicStateMap[mState] ?? MusicStatus.error;
+  static MusicStatus _mStateSanitize(String mState) => musicStateMap[mState] ?? MusicStatus.error;
 
   T _getFromMap<T>(String key, Response response) {
     T result;

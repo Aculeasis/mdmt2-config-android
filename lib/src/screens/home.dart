@@ -40,8 +40,8 @@ class HomePage extends StatelessWidget {
   Future<void> _openAddServerDialog(BuildContext context, ServersController servers) async {
     final states = Provider.of<NativeStates>(context, listen: false);
     states.pageOpen(RootPage('add_server', 'add_server'));
-    final value =
-        await serverFormDialog(context, ServerData(), servers.contains, states.child('_server_dialog', bySetting: true));
+    final value = await serverFormDialog(
+        context, ServerData(), servers.contains, states.child('_server_dialog', bySetting: true));
     states.pageClose();
     if (value != null) servers.add(value);
   }
@@ -379,35 +379,33 @@ class FakeHomePage extends StatefulWidget {
 }
 
 class _FakeHomePageState extends State<FakeHomePage> {
-  bool _onlyOne = true;
+  bool _isFirst = true;
 
   @override
   Widget build(BuildContext context) {
     return Consumer<ServersController>(
-      builder: (context, servers, _) => servers.isLoaded && _onlyOne ? _body(context, servers) : Container(),
+      builder: (context, servers, _) => servers.isLoaded && _isFirst ? _body(context, servers) : Container(),
     );
   }
 
   Widget _body(BuildContext context, ServersController servers) {
-    _onlyOne = false;
-    Future<void> Function() open;
+    _isFirst = false;
+    Future<void> Function() open = () => null;
     if (widget._page.type == 'settings') {
       open = () async => await _openSettingsPage(context);
     } else if (widget._page.type == 'instance') {
       open = () async => await _openInstancePage(context, servers.byName(widget._page.name), servers);
     }
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (open != null)
-        open().then((_) {
-          widget._selfDestroy();
-        }).catchError((e) {
-          widget._selfDestroy();
-          throw e;
-        });
-      else
-        widget._selfDestroy();
-    });
+    WidgetsBinding.instance.addPostFrameCallback((_) => _openPage(open));
     return Container();
+  }
+
+  Future<void> _openPage(Future<void> Function() open) async {
+    try {
+      await open();
+    } finally {
+      widget._selfDestroy();
+    }
   }
 }
 

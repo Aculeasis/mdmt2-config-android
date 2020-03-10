@@ -10,40 +10,27 @@ import 'package:mdmt2_config/src/terminal/terminal_control.dart';
 import 'package:mdmt2_config/src/terminal/terminal_logger.dart';
 
 class CollectActualServerState {
+  final bool isEnabled;
+  final bool isControlled;
+  final bool work;
   String subtitle = '';
-  int errors = 0;
-  int counts = 0;
-  int works = 0;
-  bool isControlled = false;
-  bool work = false;
-  bool isEnabled = false;
-  bool isPartialLogger = false;
-  bool isPartialControl = false;
+  int errors = 0, counts = 0, works = 0;
+  bool isPartialLogger = false, isPartialControl = false;
 
-  CollectActualServerState(ServerData server) {
-    isEnabled = server.logger || server.control;
-    isControlled = server.inst != null;
+  CollectActualServerState(ServerData server)
+      : isEnabled = server.logger || server.control,
+        isControlled = server.inst != null,
+        work = server.inst?.work == true {
     if (!isControlled) return;
+    String loggerStr = 'disabled', controlStr = 'disabled';
 
-    String loggerStr = 'disabled', controlStr = loggerStr;
-    work = server.inst.work;
     if (server.inst.logger != null) {
-      counts++;
-      if (server.inst.logger.hasCriticalError) errors++;
-      if (server.inst.loggerWork) works++;
-      loggerStr = server.inst.logger.getStage == ConnectStage.logger
-          ? 'work'
-          : server.inst.logger.getStage.toString().split('.').last;
-      isPartialLogger = work && !server.inst.loggerWork && server.logger;
+      _filler(server.inst.logger, server.inst.loggerWork, server.logger);
+      loggerStr = _getStageStr(server.inst.logger);
     }
     if (server.inst.control != null) {
-      counts++;
-      if (server.inst.control.hasCriticalError) errors++;
-      if (server.inst.controlWork) works++;
-      controlStr = server.inst.control.getStage == ConnectStage.controller
-          ? 'work'
-          : server.inst.control.getStage.toString().split('.').last;
-      isPartialControl = work && !server.inst.controlWork && server.control;
+      _filler(server.inst.control, server.inst.controlWork, server.control);
+      controlStr = _getStageStr(server.inst.control);
     }
     assert(!(isPartialControl && isPartialLogger));
 
@@ -52,6 +39,22 @@ class CollectActualServerState {
         'Log: $loggerStr. '
         'Control: $controlStr.';
   }
+
+  void _filler(TerminalClient target, bool isWork, bool enabled) {
+    final isPartial = work && !isWork && enabled;
+    counts++;
+    if (target.hasCriticalError) errors++;
+    if (isWork) works++;
+    if (target.mode == WorkingMode.logger) {
+      isPartialLogger = isPartial;
+    } else if (target.mode == WorkingMode.controller) {
+      isPartialControl = isPartial;
+    }
+  }
+
+  String _getStageStr(TerminalClient target) => target.hasCriticalError && target.getStage == ConnectStage.wait
+      ? 'error'
+      : target.getStage.toString().split('.').last;
 }
 
 class Reconnect {
@@ -99,8 +102,8 @@ class TerminalInstance {
   TerminalLogger logger;
   TerminalControl control;
   Log log;
-  InstanceViewState view;
-  Reconnect reconnect;
+  final InstanceViewState view;
+  final Reconnect reconnect;
 
   TerminalInstance(this.logger, this.control, this.log, this.view, this.reconnect);
 
@@ -115,7 +118,7 @@ class TerminalInstance {
     logger?.dispose();
     control?.dispose();
     log?.dispose();
-    view?.dispose();
+    view.dispose();
   }
 
   bool get loggerWait => logger?.getStage == ConnectStage.wait;
