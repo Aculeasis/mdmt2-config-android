@@ -240,6 +240,13 @@ class _RunningServerPage extends State<RunningServerPage> with SingleTickerProvi
       return s[0].toUpperCase() + s.substring(1);
     }
 
+    Widget logLvlText(LogLevel l) {
+      final s = l.toString().split('.').last;
+      final head = s[0].toUpperCase();
+      final body = s.substring(1);
+      return Text.rich(TextSpan(children: [TextSpan(text: head, style: LogStyle.msg[l]), TextSpan(text: body)]));
+    }
+
     return Row(children: [
       Expanded(
           child: PopupMenuButton(
@@ -250,11 +257,11 @@ class _RunningServerPage extends State<RunningServerPage> with SingleTickerProvi
               ),
               itemBuilder: (context) => [
                     for (LogLevel l in LogLevel.values)
-                      if (l != viewStyle.lvl)
-                        PopupMenuItem(
-                          child: Text(capitalize(l)),
-                          value: l,
-                        )
+                      PopupMenuItem(
+                        child: logLvlText(l),
+                        value: l,
+                        enabled: l != viewStyle.lvl,
+                      )
                   ],
               onSelected: (value) => viewStyle.lvl = value)),
       Expanded(
