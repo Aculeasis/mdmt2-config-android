@@ -35,7 +35,7 @@ class NativeStates extends ChangeNotifier {
   bool get isLoaded => _data != null;
 
   SavedStateData child(String name, {bySetting = false}) {
-    if (bySetting && !_misc.saveAppState) return null;
+    if (bySetting && !_misc.saveAppState.value) return null;
     return _data.child(name);
   }
 
@@ -52,7 +52,7 @@ class NativeStates extends ChangeNotifier {
 
   _load() async {
     _data = await SavedStateData.restore();
-    _rootPage = _misc.saveAppState ? RootPage.fromString(_data.getString(_rootOpened)) : RootPage.empty;
+    _rootPage = _misc.saveAppState.value ? RootPage.fromString(_data.getString(_rootOpened)) : RootPage.empty;
     notifyListeners();
   }
 

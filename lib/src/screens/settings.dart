@@ -1,15 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:mdmt2_config/src/dialogs.dart';
 import 'package:mdmt2_config/src/settings/misc_settings.dart';
-import 'package:mdmt2_config/src/settings/theme_settings.dart';
-import 'package:mdmt2_config/src/misc.dart';
+import 'package:mdmt2_config/src/themes_data.dart';
 import 'package:mdmt2_config/src/widgets.dart';
 import 'package:provider/provider.dart';
 
 class SettingsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    final reconnectTile = ChangeValueNotifier();
     final misc = Provider.of<MiscSettings>(context, listen: false);
     return Scaffold(
       appBar: AppBar(
@@ -20,49 +18,37 @@ class SettingsPage extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.start,
             children: <Widget>[
-              _themeSelector(context),
+              _themeSelector(context, misc.theme),
               switchListTileTap(
-                  title: Text('Open at Run'),
-                  subtitle: Text('Auto opening the server page at run'),
-                  value: misc.openOnRunning,
-                  onChanged: (newVal) => misc.openOnRunning = newVal),
+                misc.openOnRunning,
+                title: Text('Open at Run'),
+                subtitle: Text('Auto opening the server page at run'),
+              ),
               ValueListenableBuilder(
-                  valueListenable: reconnectTile,
-                  builder: (_, __, ___) => ListTile(
+                  valueListenable: misc.autoReconnectAfterReboot,
+                  builder: (_, value, ___) => ListTile(
                         title: Text('Reconnect after reboot'),
-                        subtitle: Text(misc.autoReconnectAfterReboot > 0
-                            ? 'after ${misc.autoReconnectAfterReboot} seconds'
-                            : 'disabled'),
-                        onTap: () =>
-                            uIntDialog(context, misc.autoReconnectAfterReboot, 'Delay [0: disabled]').then((value) {
-                          if (value != null) {
-                            misc.autoReconnectAfterReboot = value;
-                            reconnectTile.notifyListeners();
-                          }
-                        }),
+                        subtitle: Text(value > 0 ? 'after $value seconds' : 'disabled'),
+                        onTap: () => uIntDialog(context, misc.autoReconnectAfterReboot, 'Delay [0: disabled]'),
                       )),
               switchListTileTap(
-                  title: Text('Restore APP state after OOM'),
-                  subtitle: Text('Clear all instances after change this setting'),
-                  value: misc.saveAppState,
-                  onChanged: (newVal) => misc.saveAppState = newVal),
+                misc.saveAppState,
+                title: Text('Restore APP state after OOM'),
+                subtitle: Text('Clear all instances after change this setting'),
+              ),
             ],
           )),
     );
   }
 
-  Widget _themeSelector(BuildContext context) {
-    final theme = Provider.of<ThemeSettings>(context, listen: false);
+  Widget _themeSelector(BuildContext context, ValueNotifier<String> theme) {
     return ListTile(
       title: Text('Theme'),
-      subtitle: Text('Selected: ${theme.theme}'),
-      onTap: () => dialogSelectOne(context, ThemeSettings.list,
+      subtitle: Text('Selected: ${theme.value}'),
+      onTap: () => dialogSelectOne(context, ThemesData.list,
           title: 'Choose theme',
-          selected: theme.theme,
-          sets: {for (var item in ThemeSettings.list) item: item}).then((value) {
-        debugPrint(' * Set theme: ${value.toString()}');
-        theme.theme = value;
-      }),
+          selected: theme.value,
+          sets: {for (var item in ThemesData.list) item: item}).then((value) => theme.value = value ?? theme.value),
     );
   }
 }

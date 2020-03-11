@@ -118,7 +118,7 @@ class ServersController extends ServersManager {
   }
 
   _makeInstance(ServerData server, {TerminalInstance instance, bool restoreView = false}) {
-    SavedStateData _getState() => MiscSettings().saveAppState ? _saved.child('states_${server.sid}') : null;
+    SavedStateData _getState() => MiscSettings().saveAppState.value ? _saved.child('states_${server.sid}') : null;
 
     instance ??= TerminalInstance(null, null, null, InstanceViewState(style.clone(), _getState(), restore: restoreView),
         Reconnect(() => run(server)));
@@ -179,8 +179,7 @@ class ServersController extends ServersManager {
   @override
   _greatResurrector() async {
     await LogsBox().filling();
-    final saveAppState = MiscSettings().saveAppState;
-    if (_array.length == 0 || !saveAppState) {
+    if (_array.length == 0 || !MiscSettings().saveAppState.value) {
       LogsBox().dispose();
       await _saved.clear();
       return;

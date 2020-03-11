@@ -1,21 +1,25 @@
 import 'package:flutter/material.dart';
+import 'package:mdmt2_config/src/themes_data.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class _N {
   static const openOnRunning = 'ms_oor';
   static const autoReconnectAfterReboot = 'ms_arar';
   static const saveAppState = 'ms_sas';
+  static const theme = 'app_theme';
 }
 
-class MiscSettings extends ChangeNotifier{
+class MiscSettings extends ChangeNotifier {
   bool isLoaded = false;
   // Открывать запущенный сервер
-  bool _openOnRunning = false;
+  final openOnRunning = ValueNotifier<bool>(false);
   // Переподключаться после ребута, сек. 0 - отключено.
-  int _autoReconnectAfterReboot = 10;
+  final autoReconnectAfterReboot = ValueNotifier<int>(10);
   // Сохранять состояния инстансов на случай OOM.
   // Для применения нужно пересоздать инсты, логи хранятся в файлах (/cache/log/)
-  bool _saveAppState = true;
+  final saveAppState = ValueNotifier<bool>(true);
+  // Тема
+  final theme = ValueNotifier<String>('Dark');
   // Задержка всяких обновлений для уменьшения частоты перерисовки виджетов
   final throttleTime = Duration(milliseconds: 60);
 
@@ -27,45 +31,21 @@ class MiscSettings extends ChangeNotifier{
     _loadAll();
   }
 
-  int get autoReconnectAfterReboot => _autoReconnectAfterReboot;
-  set autoReconnectAfterReboot(int value) {
-    if (value != _autoReconnectAfterReboot) {
-      _autoReconnectAfterReboot = value;
-      _saveInt(_N.autoReconnectAfterReboot, _autoReconnectAfterReboot);
-    }
-  }
-
-  bool get openOnRunning => _openOnRunning;
-  set openOnRunning(bool value) {
-    if (value != _openOnRunning) {
-      _openOnRunning = value;
-      _saveBool(_N.openOnRunning, _openOnRunning);
-    }
-  }
-
-  bool get saveAppState => _saveAppState;
-  set saveAppState(bool value) {
-    if (value != _saveAppState) {
-      _saveAppState = value;
-      _saveBool(_N.saveAppState, _saveAppState);
-    }
-  }
-
-  _saveBool(String key, bool value) async {
-    final p = await SharedPreferences.getInstance();
-    p.setBool(key, value);
-  }
-
-  _saveInt(String key, int value) async {
-    final p = await SharedPreferences.getInstance();
-    p.setInt(key, value);
-  }
+  ThemeData get lightTheme => ThemesData.lightTheme(theme.value);
+  ThemeData get darkTheme => ThemesData.darkTheme(theme.value);
 
   _loadAll() async {
     final p = await SharedPreferences.getInstance();
-    _openOnRunning = p.getBool(_N.openOnRunning) ?? _openOnRunning;
-    _autoReconnectAfterReboot = p.getInt(_N.autoReconnectAfterReboot) ?? _autoReconnectAfterReboot;
-    _saveAppState = p.getBool(_N.saveAppState) ?? _saveAppState;
+    openOnRunning.value = p.getBool(_N.openOnRunning) ?? openOnRunning.value;
+    autoReconnectAfterReboot.value = p.getInt(_N.autoReconnectAfterReboot) ?? autoReconnectAfterReboot.value;
+    saveAppState.value = p.getBool(_N.saveAppState) ?? saveAppState.value;
+    theme.value = p.get(_N.theme) ?? theme.value;
+
+    openOnRunning.addListener(() => p.setBool(_N.openOnRunning, openOnRunning.value));
+    autoReconnectAfterReboot.addListener(() => p.setInt(_N.autoReconnectAfterReboot, autoReconnectAfterReboot.value));
+    saveAppState.addListener(() => p.setBool(_N.saveAppState, saveAppState.value));
+    theme.addListener(() => p.setString(_N.theme, theme.value));
+
     isLoaded = true;
     notifyListeners();
   }

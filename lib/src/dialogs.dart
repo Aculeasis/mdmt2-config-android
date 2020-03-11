@@ -155,20 +155,20 @@ class _ServerFormState extends State<_ServerForm> {
                   isVisible: false,
                 ),
                 switchListTileTap(
-                    contentPadding: EdgeInsets.zero,
-                    title: Text('Log'),
-                    value: _ctlBool['logger'].value,
-                    onChanged: (newVal) => _ctlBool['logger'].value = newVal),
+                  _ctlBool['logger'],
+                  contentPadding: EdgeInsets.zero,
+                  title: Text('Log'),
+                ),
                 switchListTileTap(
-                    contentPadding: EdgeInsets.zero,
-                    title: Text('Control'),
-                    value: _ctlBool['control'].value,
-                    onChanged: (newVal) => _ctlBool['control'].value = newVal),
+                  _ctlBool['control'],
+                  contentPadding: EdgeInsets.zero,
+                  title: Text('Control'),
+                ),
                 switchListTileTap(
-                    contentPadding: EdgeInsets.zero,
-                    title: Text('TOTP Salt'),
-                    value: _ctlBool['totpSalt'].value,
-                    onChanged: (newVal) => _ctlBool['totpSalt'].value = newVal),
+                  _ctlBool['totpSalt'],
+                  contentPadding: EdgeInsets.zero,
+                  title: Text('TOTP Salt'),
+                ),
                 textFormFieldPassword(
                   context,
                   decoration: InputDecoration(labelText: 'ws_token'),
@@ -253,8 +253,8 @@ Future<String> uriDialog(BuildContext context, String oldURI) async {
   );
 }
 
-Future<int> uIntDialog(BuildContext context, int oldValue, String label) async {
-  final _controller = TextEditingController(text: oldValue.toString());
+Future<int> uIntDialog(BuildContext context, ValueNotifier<int> notify, String label) async {
+  final _controller = TextEditingController(text: notify.value.toString());
   final key = GlobalKey<FormState>();
   return showDialog<int>(
     context: context,
@@ -267,7 +267,10 @@ Future<int> uIntDialog(BuildContext context, int oldValue, String label) async {
         RaisedButton(
           child: Text('Set'),
           onPressed: () {
-            if (key.currentState.validate()) Navigator.of(context).pop(int.tryParse(_controller.text));
+            if (key.currentState.validate()) {
+              notify.value = int.tryParse(_controller.text);
+              Navigator.of(context).pop(notify.value);
+            }
           },
         ),
       ],

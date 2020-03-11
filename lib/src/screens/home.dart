@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/cupertino.dart' as cupertino;
+import 'package:flutter/cupertino.dart' as cupertino show CupertinoPageRoute;
 import 'package:flutter/material.dart';
 import 'package:mdmt2_config/src/dialogs.dart';
 import 'package:mdmt2_config/src/native_states.dart';
@@ -87,7 +87,8 @@ class HomePage extends StatelessWidget {
 
   Widget _buildRow(BuildContext context, ServersController servers, ServerData server) {
     void openPageCallback(ServerData _server) {
-      if (Provider.of<MiscSettings>(context, listen: false).openOnRunning) _openInstancePage(context, _server, servers);
+      if (Provider.of<MiscSettings>(context, listen: false).openOnRunning.value)
+        _openInstancePage(context, _server, servers);
     }
 
     final state = CollectActualServerState(server);

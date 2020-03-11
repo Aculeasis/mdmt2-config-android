@@ -3,7 +3,6 @@ import 'package:mdmt2_config/src/native_states.dart';
 import 'package:mdmt2_config/src/screens/home.dart';
 import 'package:mdmt2_config/src/servers/servers_controller.dart';
 import 'package:mdmt2_config/src/settings/misc_settings.dart';
-import 'package:mdmt2_config/src/settings/theme_settings.dart';
 import 'package:provider/provider.dart';
 
 void main() {
@@ -19,10 +18,6 @@ void main() {
           create: (_) => MiscSettings(),
           lazy: false,
         ),
-        ChangeNotifierProvider<ThemeSettings>(
-          create: (_) => ThemeSettings(),
-          lazy: false,
-        ),
         ChangeNotifierProvider<NativeStates>(
           create: (context) => NativeStates(Provider.of<MiscSettings>(context, listen: false)),
           lazy: true,
@@ -36,17 +31,16 @@ void main() {
       child: Consumer<MiscSettings>(
           builder: (_, misc, __) => !misc.isLoaded
               ? Container()
-              : Consumer2<ThemeSettings, NativeStates>(
-                  builder: (_, theme, states, __) =>
-                      theme.isLoaded && states.isLoaded ? MyApp(theme, states) : Container())),
+              : Consumer<NativeStates>(
+                  builder: (_, states, __) => states.isLoaded ? MyApp(misc, states) : Container())),
     ),
   );
 }
 
 class MyApp extends StatefulWidget {
-  final theme;
-  final states;
-  MyApp(this.theme, this.states);
+  final MiscSettings misc;
+  final NativeStates states;
+  MyApp(this.misc, this.states);
 
   @override
   _MyAppState createState() => _MyAppState();
@@ -63,11 +57,13 @@ class _MyAppState extends State<MyApp> {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      theme: widget.theme.lightTheme,
-      darkTheme: widget.theme.darkTheme,
-      home: _page != null ? FakeHomePage(_page, _destroyFake) : HomePage(),
-    );
+    return ValueListenableBuilder(
+        valueListenable: widget.misc.theme,
+        builder: (_, __, ___) => MaterialApp(
+              theme: widget.misc.lightTheme,
+              darkTheme: widget.misc.darkTheme,
+              home: _page != null ? FakeHomePage(_page, _destroyFake) : HomePage(),
+            ));
   }
 
   RootPage _setRootPage(NativeStates states) {

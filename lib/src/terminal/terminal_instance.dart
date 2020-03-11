@@ -74,7 +74,7 @@ class Reconnect {
   void activate() {
     _timer?.cancel();
     _duration = null;
-    final delay = MiscSettings().autoReconnectAfterReboot;
+    final delay = MiscSettings().autoReconnectAfterReboot.value;
     if (callback != null && delay > 0) {
       debugPrint('RECONNECT activate');
       _duration = Duration(seconds: delay);

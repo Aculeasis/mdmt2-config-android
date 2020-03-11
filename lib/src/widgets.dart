@@ -1,25 +1,21 @@
 import 'package:flutter/material.dart';
 
 Widget switchListTileTap(
-    {Color activeColor,
-    EdgeInsetsGeometry contentPadding,
-    Widget title,
-    Widget subtitle,
-    bool value = false,
-    Function(bool) onChanged}) {
-  final _value = ValueNotifier<bool>(value);
+  ValueNotifier<bool> notify, {
+  Color activeColor,
+  EdgeInsetsGeometry contentPadding,
+  Widget title,
+  Widget subtitle,
+}) {
   return ValueListenableBuilder<bool>(
-      valueListenable: _value,
+      valueListenable: notify,
       builder: (_, value, __) => SwitchListTile(
           activeColor: activeColor,
           contentPadding: contentPadding,
           title: title,
           subtitle: subtitle,
           value: value,
-          onChanged: (newVal) {
-            _value.value = newVal;
-            if (onChanged != null) onChanged(newVal);
-          }));
+          onChanged: (newVal) => notify.value = newVal));
 }
 
 seeOkToast(BuildContext context, String msg, {ScaffoldState scaffold}) {
