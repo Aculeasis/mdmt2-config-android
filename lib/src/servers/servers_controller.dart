@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:mdmt2_config/src/servers/server_data.dart';
+import 'package:mdmt2_config/src/servers/servers_array.dart';
 import 'package:mdmt2_config/src/settings/log_style.dart';
 import 'package:mdmt2_config/src/settings/misc_settings.dart';
 import 'package:mdmt2_config/src/terminal/file_logging.dart';
@@ -13,7 +14,6 @@ import 'package:mdmt2_config/src/terminal/terminal_instance.dart';
 import 'package:mdmt2_config/src/terminal/terminal_logger.dart';
 import 'package:native_state/native_state.dart';
 import 'package:rxdart/rxdart.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 part 'package:mdmt2_config/src/blocs/servers_controller.dart';
 part 'package:mdmt2_config/src/servers/servers_manager.dart';
@@ -63,11 +63,11 @@ class ServersController extends ServersManager {
   }
 
   void _clearAllInput() {
-    for (var server in loop) _clearInput(server);
+    for (var server in _array.iterable) _clearInput(server);
   }
 
   void _stopAllInput() {
-    for (var server in loop) _stopInput(server);
+    for (var server in _array.iterable) _stopInput(server);
   }
 
   bool _removeInstance(ServerData server, {bool callDispose = true, bool notify = true}) {
@@ -118,13 +118,13 @@ class ServersController extends ServersManager {
   }
 
   _makeInstance(ServerData server, {TerminalInstance instance, bool restoreView = false}) {
-    SavedStateData _getState() => MiscSettings().saveAppState ? _saved.child('states_${server.uuid}') : null;
+    SavedStateData _getState() => MiscSettings().saveAppState ? _saved.child('states_${server.sid}') : null;
 
     instance ??= TerminalInstance(null, null, null, InstanceViewState(style.clone(), _getState(), restore: restoreView),
         Reconnect(() => run(server)));
     int incCounts = 0;
     if (server.logger) {
-      instance.log ??= Log(instance.view.style, instance.view.unreadMessages, _getState(), server.uuid);
+      instance.log ??= Log(instance.view.style, instance.view.unreadMessages, _getState(), server.sid);
       if (instance.logger == null) {
         instance.logger = TerminalLogger(server, _getState(), instance.log);
         instance.logger.stateStream.listen(_instanceSignalCollector);
@@ -180,16 +180,16 @@ class ServersController extends ServersManager {
   _greatResurrector() async {
     await LogsBox().filling();
     final saveAppState = MiscSettings().saveAppState;
-    if (length == 0 || !saveAppState) {
+    if (_array.length == 0 || !saveAppState) {
       LogsBox().dispose();
       await _saved.clear();
       return;
     }
 
-    for (var server in _servers) {
-      final states = _saved.child('states_${server.uuid}');
+    for (var server in _array.iterable) {
+      final states = _saved.child('states_${server.sid}');
       if (states.getBool('flag') == true) {
-        debugPrint(' * Restoring ${server.name} = ${server.uuid}');
+        debugPrint(' * Restoring ${server.name} = ${server.sid}');
         _makeInstance(server, restoreView: true);
       } else {
         states.clear();

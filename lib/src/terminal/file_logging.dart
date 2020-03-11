@@ -2,9 +2,11 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' show join;
 import 'package:path_provider/path_provider.dart';
 
 class LogsBox {
+  static const logsDir = 'logs';
   String _path;
   Map<String, File> _files = <String, File>{};
   Set<String> _owned = <String>{};
@@ -15,8 +17,7 @@ class LogsBox {
 
   filling() async {
     assert(_owned != null && _files != null);
-    final _f = await getTemporaryDirectory();
-    final path = Directory('${_f.path}/log');
+    final path = Directory(join((await getTemporaryDirectory()).path, logsDir));
     try {
       await path.create(recursive: true);
     } catch (e) {
@@ -31,7 +32,7 @@ class LogsBox {
 
   FileLog getFileLog(String name) {
     if (name == null || name == '' || _path == null) return null;
-    final strPath = '$_path/$name';
+    final strPath = join(_path, name);
     if (_owned?.contains(strPath) == true) {
       debugPrint('*** Error file $strPath already used ***');
       return null;

@@ -16,57 +16,64 @@ abstract class _BLoC extends ChangeNotifier {
   final __stream = StreamController<_CMD>();
   StreamSubscription __subscription;
   _BLoC() {
-    __subscription = __stream.stream.listen((_CMD data) {
-      switch (data.cmd) {
-        case _tCMD.removeAll:
-          _removeAllInput();
-          break;
-        case _tCMD.upgrade:
-          _upgradeInput(data.server1, data.server2);
-          break;
-        case _tCMD.add:
-          _addInput(data.server1);
-          break;
-        case _tCMD.addAlways:
-          _addAlwaysInput(data.server1);
-          break;
-        case _tCMD.remove:
-          _removeInput(data.server1, result: data.serverCallback);
-          break;
-        case _tCMD.insertAlways:
-          _insertAlwaysInput(data.index1, data.server1);
-          break;
-        case _tCMD.relocation:
-          _relocationInput(data.index1, data.index2);
-          break;
-        case _tCMD.clearAll:
-          _clearAllInput();
-          break;
-        case _tCMD.stopAll:
-          _stopAllInput();
-          break;
-        case _tCMD.stop:
-          _stopInput(data.server1);
-          break;
-        case _tCMD.clear:
-          _clearInput(data.server1);
-          break;
-        case _tCMD.run:
-          _runInput(data.server1, result: data.serverCallback);
-          break;
+    __subscription = __stream.stream.listen((_CMD data) async {
+      __subscription.pause();
+      try {
+        await __input(data);
+      } finally {
+        __subscription.resume();
       }
     });
   }
 
-  void _removeAllInput();
+  __input(_CMD data) async {
+    switch (data.cmd) {
+      case _tCMD.removeAll:
+        await _removeAllInput();
+        break;
+      case _tCMD.upgrade:
+        await _upgradeInput(data.server1, data.server2);
+        break;
+      case _tCMD.add:
+        await _addInput(data.server1);
+        break;
+      case _tCMD.addAlways:
+        await _addAlwaysInput(data.server1);
+        break;
+      case _tCMD.remove:
+        await _removeInput(data.server1, result: data.serverCallback);
+        break;
+      case _tCMD.insertAlways:
+        await _insertAlwaysInput(data.index1, data.server1);
+        break;
+      case _tCMD.relocation:
+        await _relocationInput(data.index1, data.index2);
+        break;
+      case _tCMD.clearAll:
+        _clearAllInput();
+        break;
+      case _tCMD.stopAll:
+        _stopAllInput();
+        break;
+      case _tCMD.stop:
+        _stopInput(data.server1);
+        break;
+      case _tCMD.clear:
+        _clearInput(data.server1);
+        break;
+      case _tCMD.run:
+        _runInput(data.server1, result: data.serverCallback);
+        break;
+    }
+  }
 
-  void _upgradeInput(ServerData oldServer, ServerData server);
-
-  bool _addInput(ServerData server);
-  void _addAlwaysInput(ServerData server);
-  void _removeInput(ServerData server, {returnServerCallback result});
-  void _insertAlwaysInput(int index, ServerData server);
-  void _relocationInput(int oldIndex, newIndex);
+  Future<void> _removeAllInput();
+  Future<void> _upgradeInput(ServerData oldServer, ServerData server);
+  Future<bool> _addInput(ServerData server);
+  Future<void> _addAlwaysInput(ServerData server);
+  Future<void> _removeInput(ServerData server, {returnServerCallback result});
+  Future<void> _insertAlwaysInput(int index, ServerData server);
+  Future<void> _relocationInput(int oldIndex, newIndex);
 
   void _clearAllInput();
   void _stopAllInput();
