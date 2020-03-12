@@ -24,18 +24,17 @@ class RootPage {
 
 class NativeStates extends ChangeNotifier {
   static const _rootOpened = 'root_page';
-  MiscSettings _misc;
   RootPage _rootPage;
   SavedStateData _data;
 
-  NativeStates(this._misc) {
+  NativeStates() {
     _load();
   }
 
   bool get isLoaded => _data != null;
 
   SavedStateData child(String name, {bySetting = false}) {
-    if (bySetting && !_misc.saveAppState.value) return null;
+    if (bySetting && !MiscSettings().saveAppState.value) return null;
     return _data.child(name);
   }
 
@@ -44,6 +43,9 @@ class NativeStates extends ChangeNotifier {
   Future<bool> pageClose() => _data.remove(_rootOpened);
 
   RootPage pageRestore({bool peek = false}) {
+    if (_rootPage == null)
+      _rootPage =
+          MiscSettings().saveAppState.value ? RootPage.fromString(_data.getString(_rootOpened)) : RootPage.empty;
     if (_rootPage.isEmpty || peek) return _rootPage;
     final _result = _rootPage;
     _rootPage = RootPage.empty;
@@ -52,7 +54,6 @@ class NativeStates extends ChangeNotifier {
 
   _load() async {
     _data = await SavedStateData.restore();
-    _rootPage = _misc.saveAppState.value ? RootPage.fromString(_data.getString(_rootOpened)) : RootPage.empty;
     notifyListeners();
   }
 

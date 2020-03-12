@@ -3,10 +3,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:intl/intl.dart';
+import 'package:mdmt2_config/src/misc.dart';
 import 'package:mdmt2_config/src/terminal/instance_view_state.dart';
 import 'package:mdmt2_config/src/terminal/terminal_client.dart';
 import 'package:mdmt2_config/src/terminal/terminal_control.dart';
-import 'package:mdmt2_config/src/misc.dart';
 import 'package:mdmt2_config/src/widgets.dart';
 
 class _Controller {
@@ -182,7 +182,7 @@ class _BackupSelectsPageState extends State<BackupSelectsPage> {
       key: _scaffoldKey,
       persistentFooterButtons: <Widget>[_buttonsBottom()],
       appBar: AppBar(
-        leading: SizedBox(),
+        leading: DummyWidget,
         title: Text('Backups'),
       ),
       body: _body(),
@@ -190,7 +190,6 @@ class _BackupSelectsPageState extends State<BackupSelectsPage> {
   }
 
   Widget _body() {
-    final emptyBox = SizedBox();
     return Stack(
       fit: StackFit.expand,
       children: <Widget>[
@@ -206,7 +205,7 @@ class _BackupSelectsPageState extends State<BackupSelectsPage> {
                     ))),
         ValueListenableBuilder(
           valueListenable: controller.updateCircle,
-          builder: (_, isUpdated, child) => isUpdated ? child : emptyBox,
+          builder: (_, isUpdated, child) => isUpdated ? child : DummyWidget,
           child: _await(context),
         )
       ],

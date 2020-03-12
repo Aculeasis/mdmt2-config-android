@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:mdmt2_config/src/dialogs.dart';
+import 'package:mdmt2_config/src/misc.dart';
 import 'package:mdmt2_config/src/screens/running_server/backup_list.dart';
 import 'package:mdmt2_config/src/terminal/instance_view_state.dart';
 import 'package:mdmt2_config/src/terminal/terminal_client.dart';
@@ -125,7 +126,7 @@ class _ControllerViewState extends State<ControllerView> {
         onPressed: _isConnected ? () => widget.control.executeMe('ping') : null,
         child: Text('Ping'),
       ),
-      SizedBox(),
+      DummyWidget,
       ValueListenableBuilder(
           valueListenable: widget.view.buttons['terminal_stop'],
           builder: (_, busy, __) => RaisedButton(
@@ -137,7 +138,7 @@ class _ControllerViewState extends State<ControllerView> {
                     : null,
                 child: Text('Reload'),
               )),
-      SizedBox(),
+      DummyWidget,
       ValueListenableBuilder(
           valueListenable: widget.view.buttons['terminal_stop'],
           builder: (_, busy, __) => RaisedButton(
@@ -149,7 +150,7 @@ class _ControllerViewState extends State<ControllerView> {
                     : null,
                 child: Text('Stop'),
               )),
-      SizedBox(),
+      DummyWidget,
       _radioButton(widget.view.listenerOnOff, label: 'Listen', callBack: () => widget.control.executeMe('listener')),
     ]);
   }
@@ -163,7 +164,7 @@ class _ControllerViewState extends State<ControllerView> {
                 onPressed: _isConnected && !busy ? () => widget.control.executeMe('backup.manual') : null,
                 child: Text('Backup'),
               )),
-      SizedBox(),
+      DummyWidget,
       ValueListenableBuilder(
           valueListenable: widget.view.buttons['terminal_stop'],
           builder: (context, busy, __) => RaisedButton(
@@ -171,10 +172,10 @@ class _ControllerViewState extends State<ControllerView> {
                 onPressed: _isConnected && !busy ? () => _openBackupListPage(context) : null,
                 child: Text('Restore*'),
               )),
-      SizedBox(),
+      DummyWidget,
       _radioButton(widget.view.states['catchQryStatus'], label: 'QRY', callBack: () => widget.control.executeMe('qry')),
-      SizedBox(),
-      SizedBox(), //
+      DummyWidget,
+      DummyWidget, //
     ]);
   }
 
@@ -306,7 +307,7 @@ class _ControllerViewState extends State<ControllerView> {
               onPressed: _isConnected && !busy
                   ? () => widget.control.executeMe('rec', data: 'compile_${widget.view.states['modelIndex'].value}_0')
                   : null)),
-      SizedBox(),
+      DummyWidget,
       RaisedButton(
           child: Text('Remove'),
           onPressed: _isConnected
@@ -316,7 +317,7 @@ class _ControllerViewState extends State<ControllerView> {
                     if (value) widget.control.executeMe('rec', data: 'del_${widget.view.states['modelIndex'].value}_0');
                   })
               : null),
-      SizedBox(),
+      DummyWidget,
       dropdownButtonInt(widget.view.states['modelIndex'], 6)
     ]);
   }
@@ -331,11 +332,11 @@ class _ControllerViewState extends State<ControllerView> {
               child: Text('Record'),
               onPressed:
                   _isConnected && !busy ? () => widget.control.executeMe('rec', data: 'rec_${target()}') : null)),
-      SizedBox(),
+      DummyWidget,
       RaisedButton(
           child: Text('Play'),
           onPressed: _isConnected ? () => widget.control.executeMe('rec', data: 'play_${target()}') : null),
-      SizedBox(),
+      DummyWidget,
       dropdownButtonInt(widget.view.states['sampleIndex'], 3),
     ]);
   }
@@ -535,7 +536,7 @@ class _FieldForTAVLineState extends State<FieldForTAVLine> {
             child: Padding(
               padding: EdgeInsets.only(left: 5),
               child: DropdownButton<String>(
-                underline: SizedBox(),
+                underline: DummyWidget,
                 items: <String>['TTS', 'ASK', 'VOICE'].map<DropdownMenuItem<String>>((String value) {
                   return DropdownMenuItem<String>(
                     value: value,

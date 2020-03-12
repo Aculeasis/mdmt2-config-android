@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:mdmt2_config/src/settings/misc_settings.dart';
 
+const DummyWidget = const SizedBox();
+
 class _ValueNotifier<T> extends ValueNotifier<T> {
   _ValueNotifier(T value) : super(value);
 

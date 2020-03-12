@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/cupertino.dart' as cupertino show CupertinoPageRoute;
 import 'package:flutter/material.dart';
 import 'package:mdmt2_config/src/dialogs.dart';
+import 'package:mdmt2_config/src/misc.dart';
 import 'package:mdmt2_config/src/native_states.dart';
 import 'package:mdmt2_config/src/screens/running_server/runhing_server.dart';
 import 'package:mdmt2_config/src/screens/settings.dart';
@@ -231,11 +232,11 @@ class HomePage extends StatelessWidget {
   }
 
   Widget _newMessagesIcon(BuildContext context, ServerData server) {
-    if (server.inst?.view?.unreadMessages == null) return SizedBox();
+    if (server.inst?.view?.unreadMessages == null) return DummyWidget;
     return ValueListenableBuilder(
         valueListenable: server.inst.view.unreadMessages,
         builder: (_, count, __) {
-          if (count == 0) return SizedBox();
+          if (count == 0) return DummyWidget;
           count = count < 99 ? count : 99;
           return Container(
             alignment: Alignment.topRight,
@@ -347,21 +348,21 @@ class HomePage extends StatelessWidget {
         title: StreamBuilder<InstancesState>(
             initialData: InstancesState(),
             stream: Provider.of<ServersController>(context, listen: false).stateStream,
-            builder: (_, value) => (value?.data?.counts ?? 0) != 0 ? _title(value.data) : SizedBox()),
+            builder: (_, value) => (value?.data?.counts ?? 0) != 0 ? _title(value.data) : DummyWidget),
         actions: <Widget>[
           Consumer<ServersController>(
             builder: (context, servers, _) => servers.isLoaded
                 ? StreamBuilder<InstancesState>(
                     initialData: InstancesState(),
                     stream: servers.stateStream,
-                    builder: (_, val) => val.data != null ? _mainPopupMenu(context, servers, val.data) : Container())
-                : Container(),
+                    builder: (_, val) => val.data != null ? _mainPopupMenu(context, servers, val.data) : DummyWidget)
+                : DummyWidget,
           )
         ],
       ),
       body: SafeArea(child: Consumer<ServersController>(
         builder: (context, servers, _) {
-          if (!servers.isLoaded) return Container();
+          if (!servers.isLoaded) return DummyWidget;
           _pageRestore(context, servers);
           return _buildServersView(context, servers);
         },
@@ -385,7 +386,7 @@ class _FakeHomePageState extends State<FakeHomePage> {
   @override
   Widget build(BuildContext context) {
     return Consumer<ServersController>(
-      builder: (context, servers, _) => servers.isLoaded && _isFirst ? _body(context, servers) : Container(),
+      builder: (context, servers, _) => servers.isLoaded && _isFirst ? _body(context, servers) : DummyWidget,
     );
   }
 
@@ -398,7 +399,7 @@ class _FakeHomePageState extends State<FakeHomePage> {
       open = () async => await _openInstancePage(context, servers.byName(widget._page.name), servers);
     }
     WidgetsBinding.instance.addPostFrameCallback((_) => _openPage(open));
-    return Container();
+    return DummyWidget;
   }
 
   Future<void> _openPage(Future<void> Function() open) async {

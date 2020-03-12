@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:mdmt2_config/src/misc.dart';
 import 'package:mdmt2_config/src/native_states.dart';
 import 'package:mdmt2_config/src/screens/home.dart';
 import 'package:mdmt2_config/src/servers/servers_controller.dart';
@@ -19,8 +20,8 @@ void main() {
           lazy: false,
         ),
         ChangeNotifierProvider<NativeStates>(
-          create: (context) => NativeStates(Provider.of<MiscSettings>(context, listen: false)),
-          lazy: true,
+          create: (_) => NativeStates(),
+          lazy: false,
         ),
         ChangeNotifierProvider<ServersController>(
           create: (context) =>
@@ -28,11 +29,8 @@ void main() {
           lazy: true,
         ),
       ],
-      child: Consumer<MiscSettings>(
-          builder: (_, misc, __) => !misc.isLoaded
-              ? Container()
-              : Consumer<NativeStates>(
-                  builder: (_, states, __) => states.isLoaded ? MyApp(misc, states) : Container())),
+      child: Consumer2<MiscSettings, NativeStates>(
+          builder: (_, misc, states, __) => misc.isLoaded && states.isLoaded ? MyApp(misc, states) : DummyWidget),
     ),
   );
 }

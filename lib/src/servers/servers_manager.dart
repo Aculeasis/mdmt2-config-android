@@ -77,9 +77,7 @@ abstract class ServersManager extends _BLoC {
     if (index != null) {
       await _db.delete(server.id);
       await _db.updateAll(_array.iterable, start: index);
-      server
-        ..reset()
-        ..id = null;
+      server.reset();
       if (result != null) result(server);
     }
     notifyListeners();

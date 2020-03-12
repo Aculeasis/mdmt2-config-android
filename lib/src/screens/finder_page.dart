@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:mdmt2_config/src/misc.dart';
 import 'package:mdmt2_config/src/upnp/finder.dart';
 import 'package:mdmt2_config/src/upnp/terminal_info.dart';
 
@@ -45,7 +46,7 @@ class _FinderPageState extends State<FinderPage> {
         child: Scaffold(
       persistentFooterButtons: <Widget>[_buttonBack()],
       appBar: AppBar(
-        leading: SizedBox(),
+        leading: DummyWidget,
         title: Text('SSDP'),
       ),
       body: _body(),
@@ -64,9 +65,9 @@ class _FinderPageState extends State<FinderPage> {
         stream: finder.status,
         builder: (_, snapshot) {
           debugPrint('${snapshot.data} ${snapshot.connectionState}');
-          if (snapshot == null || snapshot.connectionState != ConnectionState.active) return SizedBox();
+          if (snapshot == null || snapshot.connectionState != ConnectionState.active) return DummyWidget;
           if (snapshot.hasError) return _retryBar(text: snapshot.error.toString());
-          if (snapshot.data == null || snapshot.data == FinderStage.processing) return SizedBox();
+          if (snapshot.data == null || snapshot.data == FinderStage.processing) return DummyWidget;
           if (snapshot.data == FinderStage.wait) return _retryBar();
           return Container(
             height: 2,
@@ -111,7 +112,7 @@ class _FinderPageState extends State<FinderPage> {
               showCheckboxColumn: false,
               rows: [
                 if (error != null)
-                  DataRow(cells: [DataCell(Text('$error', overflow: TextOverflow.ellipsis)), DataCell(SizedBox())])
+                  DataRow(cells: [DataCell(Text('$error', overflow: TextOverflow.ellipsis)), DataCell(DummyWidget)])
                 else
                   ..._rowsBuild(snapshot?.data)
               ]);

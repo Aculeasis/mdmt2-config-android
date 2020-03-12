@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:mdmt2_config/src/misc.dart';
 import 'package:mdmt2_config/src/screens/running_server/controller.dart';
 import 'package:mdmt2_config/src/servers/server_data.dart';
 import 'package:mdmt2_config/src/settings/log_style.dart';
@@ -131,7 +132,7 @@ class _RunningServerPage extends State<RunningServerPage> with SingleTickerProvi
         if (instance != null)
           ValueListenableBuilder(
               valueListenable: instance.view.states['logExpanded'],
-              builder: (_, expanded, child) => expanded ? child : SizedBox(),
+              builder: (_, expanded, child) => expanded ? child : DummyWidget,
               child: Container(
                 color: Colors.black.withOpacity(.5),
                 child: log != null ? _loggerSettings(instance.view, log) : _disabledTop(),
@@ -415,7 +416,7 @@ class _LogListViewState extends State<LogListView> with SingleTickerProviderStat
             switch (status) {
               case ButtonDisplaySignal.hide:
                 _animationController.reset();
-                return SizedBox();
+                return DummyWidget;
               case ButtonDisplaySignal.fadeIn:
                 _animationController.forward();
                 return child;
@@ -423,7 +424,7 @@ class _LogListViewState extends State<LogListView> with SingleTickerProviderStat
                 _animationController.reverse();
                 return child;
             }
-            return SizedBox();
+            return DummyWidget;
           },
           child: Padding(
             padding: EdgeInsets.all(10),
@@ -459,7 +460,7 @@ class _LogListViewState extends State<LogListView> with SingleTickerProviderStat
                       builder: (_, event) => event.connectionState == ConnectionState.active && event.data != null
                           ? ValueListenableBuilder(
                               valueListenable: widget.view.style, builder: (_, __, ___) => _logBody(event.data))
-                          : SizedBox()),
+                          : DummyWidget),
                 ),
                 _backButton()
               ],
