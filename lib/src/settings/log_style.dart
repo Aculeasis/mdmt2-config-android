@@ -15,15 +15,18 @@ const timeFormats = {
 const _defaultLogStyle = 'def_log_slyle';
 
 class _N {
-  static const lvl = '1';
   static const fontSize = '2';
   static const timeFormat = '3';
   static const callLvl = '4';
+  static const logLevels = '5';
 }
 
 class LogStyle extends ChangeValueNotifier {
+  // все двоичные маски: 1, 10, 100 итд
+  static final List<int> masks = LogLevel.values.map((e) => 1 << e.index).toList(growable: false);
+  // все биты логлевела: 111111
+  int _logLevels = (1 << LogLevel.values.length) - 1;
   bool _noNotify = false;
-  LogLevel _lvl = LogLevel.debug;
   String _timeFormat = 'Compact';
   int _callLvl = 3;
   TextStyle _base = TextStyle(color: Colors.white, fontSize: 14);
@@ -44,16 +47,21 @@ class LogStyle extends ChangeValueNotifier {
   };
   static const TextStyle time = TextStyle(color: Colors.white70);
 
-  LogLevel get lvl => _lvl;
+  int get logLevels => _logLevels;
   String get timeFormat => _timeFormat;
   int get fontSize => _base.fontSize.floor();
   TextStyle get base => _base;
   int get callLvl => _callLvl;
 
-  set lvl(LogLevel val) {
-    if (val == _lvl) return;
-    _lvl = val;
+  bool containsLvl(LogLevel lvl) => _logLevels & masks[lvl.index] == masks[lvl.index];
+  bool addLvl(LogLevel lvl) => _setLogLevels(_logLevels | masks[lvl.index]);
+  bool delLvl(LogLevel lvl) => _setLogLevels(_logLevels & ~masks[lvl.index]);
+
+  bool _setLogLevels(int value) {
+    if (value == _logLevels) return false;
+    _logLevels = value;
     notifyListeners();
+    return true;
   }
 
   set timeFormat(String val) {
@@ -63,7 +71,7 @@ class LogStyle extends ChangeValueNotifier {
   }
 
   set fontSize(int size) {
-    if (size == fontSize) return;
+    if (size == fontSize || size < 1) return;
     _base = _base.copyWith(fontSize: size.floorToDouble());
     notifyListeners();
   }
@@ -78,14 +86,14 @@ class LogStyle extends ChangeValueNotifier {
   LogStyle();
 
   LogStyle.fromJson(Map<String, dynamic> json) {
-    lvl = LogLevel.values[json[_N.lvl]] ?? lvl;
+    _logLevels = json[_N.logLevels] ?? _logLevels;
     fontSize = json[_N.fontSize] ?? fontSize;
     timeFormat = json[_N.timeFormat] ?? timeFormat;
     callLvl = json[_N.callLvl] ?? callLvl;
   }
 
   Map<String, dynamic> toJson() => {
-        _N.lvl: lvl.index,
+        _N.logLevels: _logLevels,
         _N.fontSize: fontSize,
         _N.timeFormat: timeFormat,
         _N.callLvl: callLvl,
@@ -100,7 +108,7 @@ class LogStyle extends ChangeValueNotifier {
 
   void _upgrade(LogStyle o) {
     _noNotify = true;
-    lvl = o.lvl;
+    _logLevels = o.logLevels;
     fontSize = o.fontSize;
     timeFormat = o.timeFormat;
     callLvl = o.callLvl;
@@ -113,7 +121,7 @@ class LogStyle extends ChangeValueNotifier {
   }
 
   bool isEqual(LogStyle o) =>
-      lvl == o.lvl && fontSize == o.fontSize && timeFormat == o.timeFormat && callLvl == o.callLvl;
+      _logLevels == o.logLevels && fontSize == o.fontSize && timeFormat == o.timeFormat && callLvl == o.callLvl;
 
   LogStyle clone() => LogStyle().._upgrade(this);
 

@@ -61,12 +61,12 @@ class Log {
   final _requestsStream = StreamController<String>();
   final _addLogLineStream = StreamController<dynamic>();
 
-  LogLevel _lvl;
+  int _logLevels;
 
   Stream<ListQueue<LogLine>> get actualLog => _actualStream.stream;
 
   Log(this._style, this._unreadMessages, this._saved, String uuid) {
-    _lvl = _style.lvl;
+    _logLevels = _style.logLevels;
     _style.addListener(_setLvl);
     _addLogLineSubscription = _addLogLineStream.stream.listen((dynamic line) {
       if (line is LogLine) {
@@ -144,15 +144,15 @@ class Log {
       _addLogLineStream.add(LogLine(callers, msg, LogLevel.system, DateTime.now()));
 
   _setLvl() {
-    if (_style.lvl != _lvl) {
-      _lvl = _style.lvl;
+    if (_style.logLevels != _logLevels) {
+      _logLevels = _style.logLevels;
       _rebuildActual();
       _actualStream.add(_actualLog);
     }
   }
 
   bool _addActual(LogLine line, bool isRestore) {
-    if (line.lvl.index < _lvl.index) return false;
+    if (!_style.containsLvl(line.lvl)) return false;
     if (_actualLog.length >= maxLength) _actualLog.removeLast();
     _actualLog.addFirst(line);
     if (!isRestore) {
@@ -182,5 +182,5 @@ class Log {
 
   _rebuildActual() => _actualLog
     ..clear()
-    ..addAll(_log.where((element) => element.lvl.index >= _lvl.index));
+    ..addAll(_log.where((element) => _style.containsLvl(element.lvl)));
 }

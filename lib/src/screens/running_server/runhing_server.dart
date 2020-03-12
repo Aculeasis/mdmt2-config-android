@@ -1,8 +1,9 @@
 import 'dart:collection';
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide CheckedPopupMenuItem;
 import 'package:intl/intl.dart';
+import 'package:mdmt2_config/copypastes/CheckedPopupMenuItem.dart' show CheckedPopupMenuItem;
 import 'package:mdmt2_config/src/misc.dart';
 import 'package:mdmt2_config/src/screens/running_server/controller.dart';
 import 'package:mdmt2_config/src/servers/server_data.dart';
@@ -236,11 +237,6 @@ class _RunningServerPage extends State<RunningServerPage> with SingleTickerProvi
   }
 
   Widget _loggerSettings1(LogStyle viewStyle) {
-    String capitalize(LogLevel l) {
-      final s = l.toString().split('.').last;
-      return s[0].toUpperCase() + s.substring(1);
-    }
-
     Widget logLvlText(LogLevel l) {
       final s = l.toString().split('.').last;
       final head = s[0].toUpperCase();
@@ -248,23 +244,30 @@ class _RunningServerPage extends State<RunningServerPage> with SingleTickerProvi
       return Text.rich(TextSpan(children: [TextSpan(text: head, style: LogStyle.msg[l]), TextSpan(text: body)]));
     }
 
+    String makeLvlLine() {
+      String result = [
+        for (var lvl in LogLevel.values) if (viewStyle.containsLvl(lvl)) lvl.toString().split('.').last[0].toUpperCase()
+      ].join();
+      if (result.isEmpty)
+        result = 'Nope';
+      else if (result.length == LogLevel.values.length) result = 'All';
+      return result;
+    }
+
     return Row(children: [
       Expanded(
           child: PopupMenuButton(
-              padding: EdgeInsets.zero,
-              icon: _drawButton(
-                context,
-                'level: ${capitalize(viewStyle.lvl)}',
-              ),
-              itemBuilder: (context) => [
-                    for (LogLevel l in LogLevel.values)
-                      PopupMenuItem(
-                        child: logLvlText(l),
-                        value: l,
-                        enabled: l != viewStyle.lvl,
-                      )
-                  ],
-              onSelected: (value) => viewStyle.lvl = value)),
+        padding: EdgeInsets.zero,
+        icon: _drawButton(context, 'level: ${makeLvlLine()}'),
+        itemBuilder: (_) => [
+          for (var l in LogLevel.values)
+            CheckedPopupMenuItem(
+              child: logLvlText(l),
+              checked: viewStyle.containsLvl(l),
+              onTap: (value) => value ? viewStyle.addLvl(l) : viewStyle.delLvl(l),
+            )
+        ],
+      )),
       Expanded(
           child: PopupMenuButton(
               padding: EdgeInsets.zero,
