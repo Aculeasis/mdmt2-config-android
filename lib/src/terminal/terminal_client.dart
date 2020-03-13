@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-
 import 'dart:math' as math;
 
 import 'package:crypto/crypto.dart';
@@ -34,13 +33,8 @@ class AsyncRequest {
   final String method;
   final AsyncResponseHandler handler;
   final int timestamp;
-  AsyncRequest(this.method, this.handler) : timestamp = DateTime.now().millisecondsSinceEpoch;
-}
-
-class InternalCommand {
-  final String cmd;
-  final dynamic data;
-  InternalCommand(this.cmd, this.data);
+  final Timer timer;
+  AsyncRequest(this.method, this.handler, this.timer) : timestamp = DateTime.now().toUtc().millisecondsSinceEpoch;
 }
 
 class Error {
@@ -227,6 +221,7 @@ abstract class TerminalClient {
   sendRun() => _workSignal.add(WorkSignals(WorkSignalsType.run, null, false));
 
   _runInput() async {
+    _clearAsyncRequests();
     _setCriticalError(false);
     _sendWorkNotify(WorkingStatChange.connecting);
     toSysLog('Start connecting to ${server.uri}...');
@@ -295,11 +290,19 @@ abstract class TerminalClient {
 
   bool get isClosing => stage == ConnectStage.wait || stage == ConnectStage.closing;
 
+  void _clearAsyncRequests() {
+    for (var item in _asyncRequests.values) item.timer?.cancel();
+    _asyncRequests.clear();
+  }
+
   void dispose() {
     _workSignal.close();
     _stateStream.close();
     _channel?.sink?.close();
     _setCriticalError(false);
+    _clearAsyncRequests();
+    _asyncResponseHandlers.clear();
+    _requestHandlers.clear();
     debugPrint('DISPOSE $name');
   }
 
@@ -318,25 +321,31 @@ abstract class TerminalClient {
   void _restoreCriticalError() => hasCriticalError = _saved?.getBool('${name}_hasCriticalError') ?? false;
 
   @protected
-  callJRPC(String method, {dynamic params, AsyncResponseHandler handler, bool isNotify = false}) {
+  callJRPC(String method, {dynamic params, AsyncResponseHandler handler, bool isNotify = false, Duration timeout}) {
     String id;
     if ((_asyncResponseHandlers.containsKey(method) || handler != null) && !isNotify) {
       id = _makeRandomId();
-      _addAsyncRequest(id, method, handler);
+      _addAsyncRequest(id, method, handler, timeout);
     }
     _send(jsonEncode(Request(method, params: params, id: id)));
   }
 
-  _addAsyncRequest(String id, method, AsyncResponseHandler handler) {
+  void _addAsyncRequest(String id, String method, AsyncResponseHandler handler, Duration timeout) {
     if (_asyncRequests.length > maxAsyncRequestsPool) {
       toSysLog('WARNING! AsyncRequestsPool overloaded! Remove half.');
       final pool = _asyncRequests.keys.toList()
         ..sort((a, b) => _asyncRequests[a].timestamp - _asyncRequests[b].timestamp);
       for (int i = 0; i < (pool.length / 2).ceil(); i++) {
-        _asyncRequests.remove(pool[i]);
+        _asyncRequests.remove(pool[i]).timer?.cancel();
       }
     }
-    _asyncRequests[id] = AsyncRequest(method, handler);
+    final timer = timeout == null
+        ? null
+        : Timer(
+            timeout, // Дурим обработчика подсовывая ему ответ с ошибкой
+            () => _parseResponse(Response(
+                Result(null, isMissing: true), Error(-1, 'Request timeout (${timeout.inMilliseconds} ms)'), id)));
+    _asyncRequests[id] = AsyncRequest(method, handler, timer);
   }
 
   bool get isWork => _channel != null && _channel.closeCode == null;
@@ -409,6 +418,7 @@ abstract class TerminalClient {
 
   bool _parseResponse(Response response) {
     final asyncRequest = _asyncRequests.remove(response.id);
+    asyncRequest?.timer?.cancel();
     final handler = asyncRequest?.handler ?? _asyncResponseHandlers[asyncRequest?.method];
     final error = _responseErrorProcessing(response, asyncRequest, handler);
     if (error != null) {

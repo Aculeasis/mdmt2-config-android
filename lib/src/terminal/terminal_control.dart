@@ -13,6 +13,23 @@ class BackupLine {
   BackupLine(this.filename, this.time);
 }
 
+abstract class _BaseCMD {
+  final String method;
+  final dynamic params;
+  _BaseCMD(this.method, this.params);
+}
+
+class InternalCommand extends _BaseCMD {
+  InternalCommand(method, params) : super(method, params);
+}
+
+class ExternalJRPC extends _BaseCMD {
+  final AsyncResponseHandler handler;
+  final bool isNotify;
+  final Duration timeout;
+  ExternalJRPC(method, params, this.handler, this.isNotify, this.timeout) : super(method, params);
+}
+
 enum _ReconnectStage { no, maybe, really }
 
 class TerminalControl extends TerminalClient {
@@ -42,7 +59,7 @@ class TerminalControl extends TerminalClient {
 
   final _seeInToads = StreamController<String>.broadcast();
   final _sendBackupList = StreamController<List<BackupLine>>.broadcast();
-  final _externalStreamCMD = StreamController<InternalCommand>.broadcast();
+  final _externalStreamCMD = StreamController<_BaseCMD>();
   final InstanceViewState view;
   final Reconnect reconnect;
   _ReconnectStage _reconnectStage = _ReconnectStage.no;
@@ -50,7 +67,14 @@ class TerminalControl extends TerminalClient {
   TerminalControl(ServerData server, SavedStateData saved, log, this.view, this.reconnect)
       : super(server, WorkingMode.controller, saved, 'Controller', log: log) {
     subscribeTo.addAll(view.buttons.keys);
-    _externalStreamCMD.stream.listen((event) => _externalCMD(event.cmd.toLowerCase(), event.data));
+    _externalStreamCMD.stream.listen((e) {
+      if (stage != ConnectStage.work) return;
+      if (e is InternalCommand)
+        _externalCMD(e.method.toLowerCase(), e.params);
+      else if (e is ExternalJRPC)
+        callJRPC(e.method.toLowerCase(),
+            params: e.params, handler: e.handler, isNotify: e.isNotify, timeout: e.timeout);
+    });
     _addHandlers();
   }
 
@@ -59,6 +83,8 @@ class TerminalControl extends TerminalClient {
 
   // Для внешних вызовов
   executeMe(String cmd, {dynamic data}) => _externalStreamCMD.add(InternalCommand(cmd, data));
+  callJRPCExternal(String method, {params, AsyncResponseHandler handler, bool isNotify = false, Duration timeout}) =>
+      _externalStreamCMD.add(ExternalJRPC(method, params, handler, isNotify, timeout));
 
   @override
   void dispose() {
