@@ -37,7 +37,7 @@ class APIViewState {
   final data = <String, EntryInfo>{};
   // Открыты\закрыты
   final _tilesStates = <String, ValueNotifier<bool>>{};
-  double logScrollPosition = 0.1;
+  double logScrollPosition = .0;
 
   void makeFromList(List<String> list) {
     data.clear();
