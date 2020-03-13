@@ -2,8 +2,9 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:mdmt2_config/src/settings/log_style.dart';
+import 'package:mdmt2_config/src/blocs/api_view.dart';
 import 'package:mdmt2_config/src/misc.dart';
+import 'package:mdmt2_config/src/settings/log_style.dart';
 import 'package:native_state/native_state.dart';
 
 enum ButtonDisplaySignal { fadeIn, hide, fadeOut }
@@ -137,6 +138,8 @@ class InstanceViewState extends _MainStates {
   //volume
   final volume = ValueNotifier<int>(-1);
   final musicVolume = ValueNotifier<int>(-1);
+  // Кэш ответов на info:...
+  final dataAPIView = <String, EntryInfo>{};
 
   InstanceViewState(style, state, {restore = false}) : super(style, state, restore);
 

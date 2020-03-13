@@ -19,15 +19,15 @@ abstract class _BaseCMD {
   _BaseCMD(this.method, this.params);
 }
 
-class InternalCommand extends _BaseCMD {
-  InternalCommand(method, params) : super(method, params);
+class _InternalCommand extends _BaseCMD {
+  _InternalCommand(method, params) : super(method, params);
 }
 
-class ExternalJRPC extends _BaseCMD {
+class _ExternalJRPC extends _BaseCMD {
   final AsyncResponseHandler handler;
   final bool isNotify;
   final Duration timeout;
-  ExternalJRPC(method, params, this.handler, this.isNotify, this.timeout) : super(method, params);
+  _ExternalJRPC(method, params, this.handler, this.isNotify, this.timeout) : super(method, params);
 }
 
 enum _ReconnectStage { no, maybe, really }
@@ -69,9 +69,9 @@ class TerminalControl extends TerminalClient {
     subscribeTo.addAll(view.buttons.keys);
     _externalStreamCMD.stream.listen((e) {
       if (stage != ConnectStage.work) return;
-      if (e is InternalCommand)
+      if (e is _InternalCommand)
         _externalCMD(e.method.toLowerCase(), e.params);
-      else if (e is ExternalJRPC)
+      else if (e is _ExternalJRPC)
         callJRPC(e.method.toLowerCase(),
             params: e.params, handler: e.handler, isNotify: e.isNotify, timeout: e.timeout);
     });
@@ -82,9 +82,9 @@ class TerminalControl extends TerminalClient {
   Stream<List<BackupLine>> get streamBackupList => _sendBackupList.stream;
 
   // Для внешних вызовов
-  executeMe(String cmd, {dynamic data}) => _externalStreamCMD.add(InternalCommand(cmd, data));
+  executeMe(String cmd, {dynamic data}) => _externalStreamCMD.add(_InternalCommand(cmd, data));
   callJRPCExternal(String method, {params, AsyncResponseHandler handler, bool isNotify = false, Duration timeout}) =>
-      _externalStreamCMD.add(ExternalJRPC(method, params, handler, isNotify, timeout));
+      _externalStreamCMD.add(_ExternalJRPC(method, params, handler, isNotify, timeout));
 
   @override
   void dispose() {

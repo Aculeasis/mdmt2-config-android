@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:mdmt2_config/src/dialogs.dart';
 import 'package:mdmt2_config/src/misc.dart';
+import 'package:mdmt2_config/src/screens/running_server/api_view.dart';
 import 'package:mdmt2_config/src/screens/running_server/backup_list.dart';
 import 'package:mdmt2_config/src/terminal/instance_view_state.dart';
 import 'package:mdmt2_config/src/terminal/terminal_client.dart';
@@ -43,12 +44,18 @@ class _ControllerViewState extends State<ControllerView> {
     });
   }
 
-  _openBackupListPage(BuildContext context) {
+  Future<void> _openPage(BuildContext context, String page) async {
+    Widget target;
+    if (page == 'backup') {
+      target = BackupSelectsPage(widget.control, widget.view);
+    } else if (page == 'info') {
+      target = APIViewPage(widget.control, widget.view);
+    } else {
+      throw NullThrownError();
+    }
     _subscriptions.remove('toads')?.cancel();
-    Navigator.of(context)
-        .push(MaterialPageRoute(builder: (context) => BackupSelectsPage(widget.control, widget.view)))
-        .then(
-            (_) => _subscriptions['toads'] = widget.control.streamToads.listen((event) => seeOkToast(context, event)));
+    await Navigator.of(context).push(MaterialPageRoute(builder: (_) => target));
+    _subscriptions['toads'] = widget.control.streamToads.listen((event) => seeOkToast(context, event));
   }
 
   @override
@@ -169,13 +176,17 @@ class _ControllerViewState extends State<ControllerView> {
           valueListenable: widget.view.buttons['terminal_stop'],
           builder: (context, busy, __) => RaisedButton(
                 padding: EdgeInsets.all(2),
-                onPressed: _isConnected && !busy ? () => _openBackupListPage(context) : null,
+                onPressed: _isConnected && !busy ? () => _openPage(context, 'backup') : null,
                 child: Text('Restore*'),
               )),
       DummyWidget,
-      _radioButton(widget.view.states['catchQryStatus'], label: 'QRY', callBack: () => widget.control.executeMe('qry')),
+      RaisedButton(
+        padding: EdgeInsets.all(2),
+        onPressed: () => _openPage(context, 'info'),
+        child: Text('API'),
+      ),
       DummyWidget,
-      DummyWidget, //
+      _radioButton(widget.view.states['catchQryStatus'], label: 'QRY', callBack: () => widget.control.executeMe('qry')),
     ]);
   }
 
