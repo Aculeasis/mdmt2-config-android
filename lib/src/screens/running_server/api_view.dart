@@ -5,9 +5,9 @@ import 'package:flutter/rendering.dart';
 import 'package:mdmt2_config/src/blocs/api_view.dart';
 import 'package:mdmt2_config/src/misc.dart';
 import 'package:mdmt2_config/src/terminal/instance_view_state.dart';
+import 'package:mdmt2_config/src/terminal/terminal_client.dart' hide Result;
 import 'package:mdmt2_config/src/terminal/terminal_control.dart';
 import 'package:mdmt2_config/src/widgets.dart';
-import 'package:uuid/uuid.dart';
 
 class APIViewPage extends StatefulWidget {
   final TerminalControl control;
@@ -23,28 +23,38 @@ class _APIViewPageState extends State<APIViewPage> {
   ApiViewBLoC _bLoC;
   StreamSubscription<String> _subscription;
   final _scaffoldKey = GlobalKey<ScaffoldState>();
-  final _tileKeys = <String, PageStorageKey<String>>{};
   final _isConnected = ValueNotifier<bool>(false);
-  bool _clearMeLater = false;
-  final _uuid = Uuid();
+  ScrollController _logScroll;
+  StreamSubscription<WorkingNotification> _stateStreamSubscription;
 
   @override
   void initState() {
     super.initState();
-    _bLoC = ApiViewBLoC(widget.control, widget.view);
-    _isConnected.value = _bLoC.isConnected;
-    WidgetsBinding.instance.addPostFrameCallback((_) => _subscription = widget.control.streamToads.listen((event) {
-          debugPrint(event);
-          return seeOkToast(null, event, scaffold: _scaffoldKey.currentState);
-        }));
-    _bLoC.start();
+    _isConnected.value = widget.control.getStage == ConnectStage.work;
+    _stateStreamSubscription =
+        widget.control.stateStream.listen((_) => _isConnected.value = widget.control.getStage == ConnectStage.work);
+    _logScroll =
+        ScrollController(initialScrollOffset: widget.view.apiViewState.logScrollPosition, keepScrollOffset: false);
+    _bLoC = ApiViewBLoC(widget.control, widget.view)..start();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _subscription = widget.control.streamToads.listen((event) {
+        debugPrint(event);
+        return seeOkToast(null, event, scaffold: _scaffoldKey.currentState);
+      });
+      _logScroll.addListener(() {
+        if (_logScroll.hasClients) widget.view.apiViewState.logScrollPosition = _logScroll.offset;
+      });
+    });
   }
 
   @override
   void dispose() {
+    _stateStreamSubscription?.cancel();
     _subscription?.cancel();
     _bLoC?.dispose();
     _isConnected.dispose();
+    _logScroll?.dispose();
     super.dispose();
   }
 
@@ -62,12 +72,10 @@ class _APIViewPageState extends State<APIViewPage> {
         stream: _bLoC.result,
         builder: (context, snapshot) {
           if (snapshot.hasError) {
-            _tileKeys.clear();
             return _refresh(_viewText('${snapshot.error}'));
           }
-          if (!_bLoC.isConnected && snapshot.data == null) return _refresh(_viewText('Disconnected'));
+          if (!_isConnected.value && snapshot.data == null) return _refresh(_viewText('Disconnected'));
           if (snapshot.data == null || snapshot.data?.mode == ResultMode.await) {
-            _clearMeLater = _clearMeLater || snapshot.data?.mode == ResultMode.await;
             return Stack(
               fit: StackFit.expand,
               children: <Widget>[
@@ -75,10 +83,6 @@ class _APIViewPageState extends State<APIViewPage> {
                 _awaitBody(context)
               ],
             );
-          }
-          if (_clearMeLater) {
-            _clearMeLater = false;
-            _tileKeys.clear();
           }
           return _refresh(_viewData(snapshot.data?.data));
         });
@@ -100,27 +104,31 @@ class _APIViewPageState extends State<APIViewPage> {
     );
     return Scrollbar(
         child: ListView.builder(
+            controller: _logScroll,
             itemCount: list.length,
             itemBuilder: (_, i) {
               if (i >= list.length) return null;
               final title = list[i];
               final body = data[title];
-              return ExpansionTile(
-                key: (_tileKeys[title] = _tileKeys[title] ?? PageStorageKey<String>(_uuid.v4())),
-                title: Text(title),
-                onExpansionChanged: (open) {
-                  _isConnected.value = _bLoC.isConnected;
-                  if (open && body == null) _bLoC.getAPIInfo(title);
-                },
-                children: [if (body == null) _apiInfoEmpty(empty) else ..._apiInfo(body)],
-              );
+              return ValueListenableBuilder(
+                  valueListenable: widget.view.apiViewState.getTileNotify(title),
+                  builder: (_, expanded, __) {
+                    return ExpansionTile(
+                      initiallyExpanded: expanded,
+                      title: Text('$title ${body == null ? ' *' : ''}'),
+                      onExpansionChanged: (open) {
+                        if (_isConnected.value || body != null) widget.view.apiViewState.setTileState(title, open);
+                        if (open && body == null) _bLoC.getAPIInfo(title);
+                      },
+                      children: [if (body == null) _apiInfoEmpty(empty) else ..._apiInfo(body)],
+                    );
+                  });
             }));
   }
 
   Widget _apiInfoEmpty(Widget empty) {
-    final not = ValueNotifier<bool>(false);
     return ValueListenableBuilder(
-        valueListenable: not,
+        valueListenable: _isConnected,
         builder: (_, isConnected, __) => isConnected
             ? empty
             : Container(

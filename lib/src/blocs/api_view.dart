@@ -4,24 +4,6 @@ import 'package:mdmt2_config/src/terminal/instance_view_state.dart';
 import 'package:mdmt2_config/src/terminal/terminal_client.dart';
 import 'package:mdmt2_config/src/terminal/terminal_control.dart';
 
-class EntryInfo {
-  final String msg;
-  final List<String> flags;
-  final bool isError;
-  EntryInfo(String msg, List<String> flags, {this.isError = false})
-      : this.msg = msg ?? 'Empty',
-        this.flags = flags ?? List(0);
-  @override
-  bool operator ==(other) => other is EntryInfo && msg == other.msg && flags == other.flags && isError == other.isError;
-  @override
-  int get hashCode => '${msg.hashCode}${flags.hashCode}$isError'.hashCode;
-
-  EntryInfo.fromJson(Map<String, dynamic> json)
-      : msg = json['msg'] != null ? (json['msg'] as String).split('\n').map((e) => e.trim()).join('\n') : 'Empty',
-        flags = json['flags'] != null ? List<String>.from(json['flags'], growable: false) : List(0),
-        isError = false;
-}
-
 enum ResultMode { ok, await }
 
 class Result {
@@ -39,11 +21,11 @@ class ApiViewBLoC {
   final _resultStream = StreamController<Result>();
   final _onlyOne = <String>{};
   StreamSubscription<WorkingNotification> _stateStreamSubscription;
-  bool isConnected;
+  bool _isConnected;
 
-  ApiViewBLoC(this._control, this._view) : isConnected = _control.getStage == ConnectStage.work {
+  ApiViewBLoC(this._control, this._view) : _isConnected = _control.getStage == ConnectStage.work {
     _methodStream.stream.listen((api) {
-      if (!isConnected || _onlyOne.contains(api)) return;
+      if (!_isConnected || _onlyOne.contains(api)) return;
 
       if (api.isEmpty) {
         _onlyOne
@@ -65,10 +47,10 @@ class ApiViewBLoC {
     });
 
     _stateStreamSubscription = _control.stateStream.listen((event) {
-      if (!isConnected && _control.getStage == ConnectStage.work) {
-        isConnected = true;
-      } else if (isConnected && _control.getStage != ConnectStage.work) {
-        isConnected = false;
+      if (!_isConnected && _control.getStage == ConnectStage.work) {
+        _isConnected = true;
+      } else if (_isConnected && _control.getStage != ConnectStage.work) {
+        _isConnected = false;
         _onlyOne.clear();
       }
     });
@@ -77,24 +59,23 @@ class ApiViewBLoC {
   Stream<Result> get result => _resultStream.stream;
   void getAPIList() => _methodStream.add('');
   void getAPIInfo(String api) => _methodStream.add(api);
-  void start() => _view.dataAPIView.isEmpty ? getAPIList() : _sendResult();
+  void start() => _view.apiViewState.data.isEmpty ? getAPIList() : _sendResult();
 
   void _handleAPIList(Response response) {
-    _view.dataAPIView.clear();
     _onlyOne.remove('');
     List<String> list;
     try {
       list = List<String>.from(response.result.value['cmd'], growable: false)..sort();
     } catch (e) {
       _resultStream.addError('Parse error: $e');
-      return;
+      list = List(0);
     }
-    for (var line in list) _view.dataAPIView[line] = null;
-    _sendResult();
+    _view.apiViewState.makeFromList(list);
+    if (_view.apiViewState.data.isNotEmpty) _sendResult();
   }
 
   void _handleAPIListError(String error) {
-    _view.dataAPIView.clear();
+    _view.apiViewState.makeFromList(List(0));
     _onlyOne.remove('');
     _resultStream.addError(error);
   }
@@ -119,13 +100,10 @@ class ApiViewBLoC {
   }
 
   void _putInfo(String method, EntryInfo info) {
-    if (_view.dataAPIView.containsKey(method) && _view.dataAPIView[method] != info) {
-      _view.dataAPIView[method] = info;
-      _sendResult();
-    }
+    if (_view.apiViewState.putInfo(method, info)) _sendResult();
   }
 
-  void _sendResult([ResultMode mode = ResultMode.ok]) => _resultStream.add(Result(mode, _view.dataAPIView));
+  void _sendResult([ResultMode mode = ResultMode.ok]) => _resultStream.add(Result(mode, _view.apiViewState.data));
 
   void dispose() {
     _stateStreamSubscription.cancel();

@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:mdmt2_config/src/blocs/api_view.dart';
 import 'package:mdmt2_config/src/misc.dart';
 import 'package:mdmt2_config/src/settings/log_style.dart';
 import 'package:native_state/native_state.dart';
@@ -13,6 +12,50 @@ enum MusicStatus { play, pause, stop, nope, error }
 class _N {
   static const unreadMessages = '1';
   static const style = '2';
+}
+
+class EntryInfo {
+  final String msg;
+  final List<String> flags;
+  final bool isError;
+  EntryInfo(String msg, List<String> flags, {this.isError = false})
+      : this.msg = msg ?? 'Empty',
+        this.flags = flags ?? List(0);
+  @override
+  bool operator ==(other) => other is EntryInfo && msg == other.msg && flags == other.flags && isError == other.isError;
+  @override
+  int get hashCode => '${msg.hashCode}${flags.hashCode}$isError'.hashCode;
+
+  EntryInfo.fromJson(Map<String, dynamic> json)
+      : msg = json['msg'] != null ? (json['msg'] as String).split('\n').map((e) => e.trim()).join('\n') : 'Empty',
+        flags = json['flags'] != null ? List<String>.from(json['flags'], growable: false) : List(0),
+        isError = false;
+}
+
+class APIViewState {
+  // Кэш ответов на info:...
+  final data = <String, EntryInfo>{};
+  // Открыты\закрыты
+  final _tilesStates = <String, ValueNotifier<bool>>{};
+  double logScrollPosition = 0.1;
+
+  void makeFromList(List<String> list) {
+    data.clear();
+    _tilesStates.clear();
+    for (var entry in list) data[entry] = null;
+  }
+
+  bool putInfo(String method, EntryInfo info) {
+    if (data.containsKey(method) && data[method] != info) {
+      data[method] = info;
+      return true;
+    }
+    return false;
+  }
+
+  void setTileState(String method, bool state) => getTileNotify(method, state).value = state;
+  ValueNotifier<bool> getTileNotify(String method, [state = false]) =>
+      (_tilesStates[method] = _tilesStates[method] ?? ValueNotifier<bool>(state));
 }
 
 class _MainStates {
@@ -138,8 +181,8 @@ class InstanceViewState extends _MainStates {
   //volume
   final volume = ValueNotifier<int>(-1);
   final musicVolume = ValueNotifier<int>(-1);
-  // Кэш ответов на info:...
-  final dataAPIView = <String, EntryInfo>{};
+
+  final apiViewState = APIViewState();
 
   InstanceViewState(style, state, {restore = false}) : super(style, state, restore);
 
