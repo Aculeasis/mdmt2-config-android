@@ -20,6 +20,9 @@ class APIViewPage extends StatefulWidget {
 }
 
 class _APIViewPageState extends State<APIViewPage> {
+  final infoPadding = const EdgeInsets.only(left: 10, right: 10, bottom: 20);
+  final awaitTile = _awaitTile();
+
   ApiViewBLoC _bLoC;
   StreamSubscription<String> _subscription;
   final _scaffoldKey = GlobalKey<ScaffoldState>();
@@ -59,49 +62,28 @@ class _APIViewPageState extends State<APIViewPage> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(),
-      key: _scaffoldKey,
-      body: SafeArea(child: _body()),
-    );
-  }
+  Widget build(BuildContext context) => Scaffold(
+        appBar: AppBar(),
+        key: _scaffoldKey,
+        body: SafeArea(child: _body()),
+      );
 
-  Widget _body() {
-    return StreamBuilder<Result>(
-        stream: _bLoC.result,
-        builder: (context, snapshot) {
-          if (snapshot.hasError) {
-            return _refresh(_viewText('${snapshot.error}'));
-          }
-          if (!_isConnected.value && snapshot.data == null) return _refresh(_viewText('Disconnected'));
-          if (snapshot.data == null || snapshot.data?.mode == ResultMode.await) {
-            return Stack(
-              fit: StackFit.expand,
-              children: <Widget>[
-                (snapshot.data?.data?.isEmpty ?? true) ? DummyWidget : _viewData(snapshot.data?.data),
-                _awaitBody(context)
-              ],
-            );
-          }
-          return _refresh(_viewData(snapshot.data?.data));
-        });
-  }
+  Widget _body() => StreamBuilder<Result>(
+      stream: _bLoC.result,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) return _refresh(_viewText('${snapshot.error}'));
+        if (!_isConnected.value && snapshot.data == null) return _refresh(_viewText('Disconnected'));
+        if (snapshot.data == null || snapshot.data?.mode == ResultMode.await)
+          return _awaitBody(context, snapshot.data?.data);
+
+        return _refresh(_viewData(snapshot.data?.data));
+      });
 
   Widget _refresh(Widget child) => RefreshIndicator(child: child, onRefresh: () async => _bLoC.getAPIList());
 
   Widget _viewData(Map<String, EntryInfo> data) {
     data ??= {};
     final list = data.keys.toList(growable: false);
-    final empty = Container(
-      padding: EdgeInsets.symmetric(horizontal: 30),
-      alignment: Alignment.center,
-      height: 20,
-      child: Container(
-        height: 1,
-        child: LinearProgressIndicator(),
-      ),
-    );
     return Scrollbar(
         child: ListView.builder(
             controller: _logScroll,
@@ -112,48 +94,38 @@ class _APIViewPageState extends State<APIViewPage> {
               final body = data[title];
               return ValueListenableBuilder(
                   valueListenable: widget.view.apiViewState.getTileNotify(title),
-                  builder: (_, expanded, __) {
-                    return ExpansionTile(
-                      initiallyExpanded: expanded,
-                      title: Text('$title ${body == null ? ' *' : ''}'),
-                      onExpansionChanged: (open) {
-                        if (_isConnected.value || body != null) widget.view.apiViewState.setTileState(title, open);
-                        if (open && body == null) _bLoC.getAPIInfo(title);
-                      },
-                      children: [if (body == null) _apiInfoEmpty(empty) else ..._apiInfo(body)],
-                    );
-                  });
+                  builder: (_, expanded, __) => ExpansionTile(
+                        initiallyExpanded: expanded,
+                        title: Text('$title ${body == null ? ' *' : ''}'),
+                        onExpansionChanged: (open) {
+                          if (_isConnected.value || body != null) widget.view.apiViewState.setTileState(title, open);
+                          if (open && body == null) _bLoC.getAPIInfo(title);
+                        },
+                        children: _apiInfo(body),
+                      ));
             }));
   }
 
-  Widget _apiInfoEmpty(Widget empty) {
-    return ValueListenableBuilder(
-        valueListenable: _isConnected,
-        builder: (_, isConnected, __) => isConnected
-            ? empty
-            : Container(
-                padding: const EdgeInsets.only(left: 10, right: 10, bottom: 20),
-                alignment: Alignment.centerLeft,
-                child: Text.rich(TextSpan(text: 'Disconnected', style: TextStyle(color: Colors.red))),
-              ));
-  }
+  List<Widget> _apiInfo(EntryInfo info) => [
+        if (info == null) _apiInfoMsgEmpty() else _apiInfoMsg(info),
+        if (info?.flags?.isNotEmpty == true)
+          Container(
+            padding: infoPadding,
+            alignment: Alignment.centerRight,
+            child: Text.rich(TextSpan(text: info.flags.join(', '), style: TextStyle(color: Colors.green))),
+          )
+      ];
 
-  List<Widget> _apiInfo(EntryInfo info) {
-    const padding = const EdgeInsets.only(left: 10, right: 10, bottom: 20);
-    return [
-      Container(
-        padding: padding,
+  Widget _apiInfoMsgEmpty() => ValueListenableBuilder(
+      valueListenable: _isConnected,
+      builder: (_, isConnected, __) =>
+          isConnected ? awaitTile : _apiInfoMsg(EntryInfo('Disconnected', null, isError: true)));
+
+  Widget _apiInfoMsg(EntryInfo info) => Container(
+        padding: infoPadding,
         alignment: Alignment.centerLeft,
         child: info.isError ? Text.rich(TextSpan(text: info.msg, style: TextStyle(color: Colors.red))) : Text(info.msg),
-      ),
-      if (info.flags.isNotEmpty)
-        Container(
-          padding: padding,
-          alignment: Alignment.centerRight,
-          child: Text.rich(TextSpan(text: info.flags.join(', '), style: TextStyle(color: Colors.green))),
-        )
-    ];
-  }
+      );
 
   Widget _viewText(String text) => Stack(
         fit: StackFit.expand,
@@ -168,20 +140,34 @@ class _APIViewPageState extends State<APIViewPage> {
         ],
       );
 
-  Widget _awaitBody(BuildContext context) {
-    return Stack(
-      children: <Widget>[
-        Container(
-          color: Theme.of(context).canvasColor.withOpacity(.4),
-          constraints: BoxConstraints.expand(),
+  Widget _awaitBody(BuildContext context, Map<String, EntryInfo> data) => Stack(
+        fit: StackFit.expand,
+        children: <Widget>[
+          (data?.isEmpty ?? true) ? DummyWidget : _viewData(data),
+          Stack(
+            children: <Widget>[
+              Container(
+                color: Theme.of(context).canvasColor.withOpacity(.4),
+                constraints: BoxConstraints.expand(),
+              ),
+              Align(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: <Widget>[CircularProgressIndicator(), Text(''), Text('Loading...')],
+                ),
+              )
+            ],
+          )
+        ],
+      );
+
+  static Widget _awaitTile() => Container(
+        padding: EdgeInsets.symmetric(horizontal: 30),
+        alignment: Alignment.center,
+        height: 20,
+        child: Container(
+          height: 1,
+          child: LinearProgressIndicator(),
         ),
-        Align(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: <Widget>[CircularProgressIndicator(), Text(''), Text('Loading...')],
-          ),
-        )
-      ],
-    );
-  }
+      );
 }
