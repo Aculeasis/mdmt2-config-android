@@ -45,6 +45,11 @@ class APIViewState {
     for (var entry in list) data[entry] = null;
   }
 
+  void removeEmptyTiles() => _tilesStates.keys
+      .where((element) => data[element] == null)
+      .toList(growable: false)
+      .forEach((element) => _tilesStates.remove(element));
+
   bool putInfo(String method, EntryInfo info) {
     if (data.containsKey(method) && data[method] != info) {
       data[method] = info;

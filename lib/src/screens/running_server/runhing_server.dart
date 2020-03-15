@@ -12,6 +12,7 @@ import 'package:mdmt2_config/src/terminal/instance_view_state.dart';
 import 'package:mdmt2_config/src/terminal/log.dart';
 import 'package:mdmt2_config/src/terminal/terminal_control.dart';
 import 'package:mdmt2_config/src/terminal/terminal_instance.dart';
+import 'package:mdmt2_config/src/widgets.dart';
 
 class RunningServerPage extends StatefulWidget {
   final ServerData srv;
@@ -83,7 +84,7 @@ class _RunningServerPage extends State<RunningServerPage> with SingleTickerProvi
           preferredSize: Size.fromHeight(kToolbarHeight),
           child: AppBar(
             titleSpacing: 0,
-            title: _title(),
+            title: reRunButton(widget.srv, widget.runCallback),
             actions: _actions(),
             bottom: TabBar(controller: _tabController, tabs: <Widget>[
               Text('Log'),
@@ -97,23 +98,12 @@ class _RunningServerPage extends State<RunningServerPage> with SingleTickerProvi
     );
   }
 
-  Widget _title() {
-    return ValueListenableBuilder(
-        valueListenable: widget.srv,
-        builder: (_, __, ___) {
-          final enable = widget.srv.logger || widget.srv.control || _instance != null;
-          final mayRun = enable &&
-              (_instance == null || (!_instance.reconnect.isRun && (_instance.loggerWait || _instance.controlWait)));
-          return IconButton(icon: Icon(Icons.settings_backup_restore), onPressed: mayRun ? widget.runCallback : null);
-        });
-  }
-
   _actions() {
     return [
       IconButton(
         icon: Icon(Icons.import_export),
         onPressed: () {
-          final index = _instance?.view?.states['pageIndex']?.value;
+          final index = _instance?.view?.states != null ? _instance.view.states['pageIndex']?.value : null;
           if (index == 0)
             _instance.view.states['logExpanded'].value = !_instance.view.states['logExpanded'].value;
           else if (index == 1)
@@ -155,7 +145,9 @@ class _RunningServerPage extends State<RunningServerPage> with SingleTickerProvi
                     child: control != null ? _controllerSettings(control) : _disabledTop(),
                   )),
             child: Expanded(
-              child: control != null ? ControllerView(control, instance.view) : _disabledBody(),
+              child: control != null
+                  ? ControllerView(control, instance.view, widget.srv, widget.runCallback)
+                  : _disabledBody(),
             ),
           )
       ],

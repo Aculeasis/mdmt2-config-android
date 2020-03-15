@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:mdmt2_config/src/blocs/api_view.dart';
 import 'package:mdmt2_config/src/misc.dart';
+import 'package:mdmt2_config/src/servers/server_data.dart';
 import 'package:mdmt2_config/src/terminal/instance_view_state.dart';
 import 'package:mdmt2_config/src/terminal/terminal_client.dart' hide Result;
 import 'package:mdmt2_config/src/terminal/terminal_control.dart';
@@ -12,8 +13,10 @@ import 'package:mdmt2_config/src/widgets.dart';
 class APIViewPage extends StatefulWidget {
   final TerminalControl control;
   final InstanceViewState view;
+  final ServerData srv;
+  final Function runCallback;
 
-  APIViewPage(this.control, this.view, {Key key}) : super(key: key);
+  APIViewPage(this.control, this.view, this.srv, this.runCallback, {Key key}) : super(key: key);
 
   @override
   _APIViewPageState createState() => _APIViewPageState();
@@ -26,18 +29,21 @@ class _APIViewPageState extends State<APIViewPage> {
   ApiViewBLoC _bLoC;
   StreamSubscription<String> _subscription;
   final _scaffoldKey = GlobalKey<ScaffoldState>();
-  final _isConnected = ValueNotifier<bool>(false);
+  bool _isConnected;
   ScrollController _logScroll;
   StreamSubscription<WorkingNotification> _stateStreamSubscription;
 
   @override
   void initState() {
     super.initState();
-    _isConnected.value = widget.control.getStage == ConnectStage.work;
-    _stateStreamSubscription =
-        widget.control.stateStream.listen((_) => _isConnected.value = widget.control.getStage == ConnectStage.work);
-    _logScroll =
-        ScrollController(initialScrollOffset: widget.view.apiViewState.logScrollPosition, keepScrollOffset: false);
+    _isConnected = widget.control.getStage == ConnectStage.work;
+    _stateStreamSubscription = widget.control.stateStream.listen((_) {
+      if ((widget.control.getStage == ConnectStage.work) != _isConnected) {
+        setState(() => _isConnected = !_isConnected);
+        if (_isConnected) _bLoC.refresh();
+      }
+    });
+    _logScroll = ScrollController(keepScrollOffset: false);
     _bLoC = ApiViewBLoC(widget.control, widget.view)..start();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -56,14 +62,16 @@ class _APIViewPageState extends State<APIViewPage> {
     _stateStreamSubscription?.cancel();
     _subscription?.cancel();
     _bLoC?.dispose();
-    _isConnected.dispose();
     _logScroll?.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(),
+        appBar: AppBar(
+          titleSpacing: 0,
+          title: reRunButton(widget.srv, widget.runCallback),
+        ),
         key: _scaffoldKey,
         body: SafeArea(child: _body()),
       );
@@ -71,17 +79,22 @@ class _APIViewPageState extends State<APIViewPage> {
   Widget _body() => StreamBuilder<Result>(
       stream: _bLoC.result,
       builder: (context, snapshot) {
+        if (snapshot.data?.mode == ResultMode.refresh) {
+          _bLoC.start();
+          return DummyWidget;
+        }
         if (snapshot.hasError) return _refresh(_viewText('${snapshot.error}'));
-        if (!_isConnected.value && snapshot.data == null) return _refresh(_viewText('Disconnected'));
-        if (snapshot.data == null || snapshot.data?.mode == ResultMode.await)
+        if (!_isConnected && snapshot.data == null) return _refresh(_viewText('Disconnected'));
+        if (snapshot.data == null || snapshot.data.mode == ResultMode.await)
           return _awaitBody(context, snapshot.data?.data);
-
-        return _refresh(_viewData(snapshot.data?.data));
+        return _refresh(_viewData(snapshot.data.data));
       });
 
   Widget _refresh(Widget child) => RefreshIndicator(child: child, onRefresh: () async => _bLoC.getAPIList());
 
   Widget _viewData(Map<String, EntryInfo> data) {
+    WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _logScroll.hasClients ? _logScroll.jumpTo(widget.view.apiViewState.logScrollPosition) : null);
     data ??= {};
     final list = data.keys.toList(growable: false);
     return Scrollbar(
@@ -98,7 +111,7 @@ class _APIViewPageState extends State<APIViewPage> {
                         initiallyExpanded: expanded,
                         title: Text('$title ${body == null ? ' *' : ''}'),
                         onExpansionChanged: (open) {
-                          if (_isConnected.value || body != null) widget.view.apiViewState.setTileState(title, open);
+                          widget.view.apiViewState.setTileState(title, open);
                           if (open && body == null) _bLoC.getAPIInfo(title);
                         },
                         children: _apiInfo(body),
@@ -116,10 +129,7 @@ class _APIViewPageState extends State<APIViewPage> {
           )
       ];
 
-  Widget _apiInfoMsgEmpty() => ValueListenableBuilder(
-      valueListenable: _isConnected,
-      builder: (_, isConnected, __) =>
-          isConnected ? awaitTile : _apiInfoMsg(EntryInfo('Disconnected', null, isError: true)));
+  Widget _apiInfoMsgEmpty() => _isConnected ? awaitTile : _apiInfoMsg(EntryInfo('Disconnected', null, isError: true));
 
   Widget _apiInfoMsg(EntryInfo info) => Container(
         padding: infoPadding,

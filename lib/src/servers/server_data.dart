@@ -40,6 +40,10 @@ class ServerData extends ChangeThrottledValueNotifier {
     this.port = port;
   }
 
+  bool get allowToRerun =>
+      (logger || control || inst != null) &&
+      (inst == null || (!inst.reconnect.isRun && inst.loggerWait || inst.controlWait));
+
   Map<String, dynamic> toMap() => {
         if (id != null) _N.id: id,
         _N.position: position != null ? position : throw ArgumentError.notNull('position'),

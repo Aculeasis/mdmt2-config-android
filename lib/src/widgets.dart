@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:mdmt2_config/src/servers/server_data.dart';
 
 Widget switchListTileTap(
   ValueNotifier<bool> notify, {
@@ -29,4 +30,13 @@ seeOkToast(BuildContext context, String msg, {ScaffoldState scaffold}) {
       onPressed: () => scaffold.hideCurrentSnackBar(),
     ),
   ));
+}
+
+Widget reRunButton(ServerData server, Function runCallback) {
+  return ValueListenableBuilder(
+      valueListenable: server,
+      builder: (_, __, ___) {
+        return IconButton(
+            icon: Icon(Icons.settings_backup_restore), onPressed: server.allowToRerun ? runCallback : null);
+      });
 }

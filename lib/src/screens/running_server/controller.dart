@@ -5,6 +5,7 @@ import 'package:mdmt2_config/src/dialogs.dart';
 import 'package:mdmt2_config/src/misc.dart';
 import 'package:mdmt2_config/src/screens/running_server/api_view.dart';
 import 'package:mdmt2_config/src/screens/running_server/backup_list.dart';
+import 'package:mdmt2_config/src/servers/server_data.dart';
 import 'package:mdmt2_config/src/terminal/instance_view_state.dart';
 import 'package:mdmt2_config/src/terminal/terminal_client.dart';
 import 'package:mdmt2_config/src/terminal/terminal_control.dart';
@@ -13,8 +14,10 @@ import 'package:mdmt2_config/src/widgets.dart';
 class ControllerView extends StatefulWidget {
   final TerminalControl control;
   final InstanceViewState view;
+  final ServerData srv;
+  final Function runCallback;
 
-  ControllerView(this.control, this.view, {Key key}) : super(key: key);
+  ControllerView(this.control, this.view, this.srv, this.runCallback, {Key key}) : super(key: key);
 
   @override
   _ControllerViewState createState() => _ControllerViewState();
@@ -49,7 +52,7 @@ class _ControllerViewState extends State<ControllerView> {
     if (page == 'backup') {
       target = BackupSelectsPage(widget.control, widget.view);
     } else if (page == 'info') {
-      target = APIViewPage(widget.control, widget.view);
+      target = APIViewPage(widget.control, widget.view, widget.srv, widget.runCallback);
     } else {
       throw NullThrownError();
     }
