@@ -48,11 +48,12 @@ class _ControllerViewState extends State<ControllerView> {
   }
 
   Future<void> _openPage(BuildContext context, String page) async {
+    assert(widget.control != null && widget.view != null);
     Widget target;
     if (page == 'backup') {
       target = BackupSelectsPage(widget.control, widget.view);
     } else if (page == 'info') {
-      target = APIViewPage(widget.control, widget.view, widget.srv, widget.runCallback);
+      target = APIViewPage(widget.control, widget.view.apiViewState, widget.srv, widget.runCallback);
     } else {
       throw NullThrownError();
     }

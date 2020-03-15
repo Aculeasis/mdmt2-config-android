@@ -24,7 +24,7 @@ class ApiViewBLoC {
   static const timeLimit = Duration(seconds: 10);
   static const mInfo = 'info';
   final TerminalControl _control;
-  final InstanceViewState _view;
+  final APIViewState _apiViewState;
   final _methodStream = StreamController<_CMD>();
   final _resultStream = StreamController<Result>();
   final _onlyOne = <String>{};
@@ -32,7 +32,7 @@ class ApiViewBLoC {
   StreamSubscription<WorkingNotification> _stateStreamSubscription;
   bool _isConnected;
 
-  ApiViewBLoC(this._control, this._view) : _isConnected = _control.getStage == ConnectStage.work {
+  ApiViewBLoC(this._control, this._apiViewState) : _isConnected = _control.getStage == ConnectStage.work {
     _methodStream.stream.listen((cmd) {
       if (cmd.action != null) {
         switch (cmd.action) {
@@ -40,10 +40,10 @@ class ApiViewBLoC {
             _sendResult(mode: ResultMode.refresh);
             break;
           case _Actions.start:
-            if (_view.apiViewState.data.isEmpty) {
+            if (_apiViewState.data.isEmpty) {
               getAPIList();
             } else {
-              _view.apiViewState.removeEmptyTiles();
+              _apiViewState.removeEmptyTiles();
               _sendResult();
             }
             break;
@@ -106,8 +106,8 @@ class ApiViewBLoC {
         list = List(0);
       }
     }
-    _view.apiViewState.makeFromList(list);
-    if (_view.apiViewState.data.isNotEmpty) _sendResult();
+    _apiViewState.makeFromList(list);
+    if (_apiViewState.data.isNotEmpty) _sendResult();
   }
 
   void _handleAPIIfo(String method, {Response response, Error error}) {
@@ -133,10 +133,10 @@ class ApiViewBLoC {
   static bool _testResponse(Response a, Error b) => (a != null && b == null) || (a == null && b != null);
 
   void _putInfo(String method, EntryInfo info) {
-    if (_view.apiViewState.putInfo(method, info)) _sendResult();
+    if (_apiViewState.putInfo(method, info)) _sendResult();
   }
 
-  void _sendResult({ResultMode mode}) => _resultStream.add(Result(mode ?? _mode, _view.apiViewState.data));
+  void _sendResult({ResultMode mode}) => _resultStream.add(Result(mode ?? _mode, _apiViewState.data));
 
   void dispose() {
     _stateStreamSubscription.cancel();

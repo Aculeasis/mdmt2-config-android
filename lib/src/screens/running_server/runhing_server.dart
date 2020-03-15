@@ -73,9 +73,7 @@ class _RunningServerPage extends State<RunningServerPage> with SingleTickerProvi
     });
   }
 
-  _tabControllerListener() {
-    _instance?.view?.states['pageIndex']?.value = _tabController.index;
-  }
+  _tabControllerListener() => _instance.view.states['pageIndex'].value = _tabController.index;
 
   @override
   Widget build(BuildContext context) {
@@ -103,7 +101,7 @@ class _RunningServerPage extends State<RunningServerPage> with SingleTickerProvi
       IconButton(
         icon: Icon(Icons.import_export),
         onPressed: () {
-          final index = _instance?.view?.states != null ? _instance.view.states['pageIndex']?.value : null;
+          final index = _instance != null ? _instance.view.states['pageIndex'].value : null;
           if (index == 0)
             _instance.view.states['logExpanded'].value = !_instance.view.states['logExpanded'].value;
           else if (index == 1)
@@ -133,23 +131,22 @@ class _RunningServerPage extends State<RunningServerPage> with SingleTickerProvi
   }
 
   Widget _twoTab(BuildContext context, TerminalInstance instance, TerminalControl control) {
-    return Column(
+    return Stack(
       children: <Widget>[
+        Container(
+          constraints: BoxConstraints.expand(),
+          child: control != null
+              ? ControllerView(control, instance.view, widget.srv, widget.runCallback)
+              : _disabledBody(),
+        ),
         if (instance != null)
           ValueListenableBuilder(
-            valueListenable: instance.view.states['controlExpanded'],
-            builder: (_, expanded, child) => !expanded
-                ? child
-                : Expanded(
-                    child: Container(
-                    child: control != null ? _controllerSettings(control) : _disabledTop(),
-                  )),
-            child: Expanded(
-              child: control != null
-                  ? ControllerView(control, instance.view, widget.srv, widget.runCallback)
-                  : _disabledBody(),
-            ),
-          )
+              valueListenable: instance.view.states['controlExpanded'],
+              builder: (_, expanded, child) => expanded ? child : DummyWidget,
+              child: Container(
+                color: Colors.black.withOpacity(.8),
+                child: control != null ? _controllerSettings(control) : _disabledTop(),
+              )),
       ],
     );
   }

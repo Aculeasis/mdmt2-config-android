@@ -12,11 +12,11 @@ import 'package:mdmt2_config/src/widgets.dart';
 
 class APIViewPage extends StatefulWidget {
   final TerminalControl control;
-  final InstanceViewState view;
+  final APIViewState apiViewState;
   final ServerData srv;
   final Function runCallback;
 
-  APIViewPage(this.control, this.view, this.srv, this.runCallback, {Key key}) : super(key: key);
+  APIViewPage(this.control, this.apiViewState, this.srv, this.runCallback, {Key key}) : super(key: key);
 
   @override
   _APIViewPageState createState() => _APIViewPageState();
@@ -44,7 +44,7 @@ class _APIViewPageState extends State<APIViewPage> {
       }
     });
     _logScroll = ScrollController(keepScrollOffset: false);
-    _bLoC = ApiViewBLoC(widget.control, widget.view)..start();
+    _bLoC = ApiViewBLoC(widget.control, widget.apiViewState)..start();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _subscription = widget.control.streamToads.listen((event) {
@@ -52,7 +52,7 @@ class _APIViewPageState extends State<APIViewPage> {
         return seeOkToast(null, event, scaffold: _scaffoldKey.currentState);
       });
       _logScroll.addListener(() {
-        if (_logScroll.hasClients) widget.view.apiViewState.logScrollPosition = _logScroll.offset;
+        if (_logScroll.hasClients) widget.apiViewState.logScrollPosition = _logScroll.offset;
       });
     });
   }
@@ -94,7 +94,7 @@ class _APIViewPageState extends State<APIViewPage> {
 
   Widget _viewData(Map<String, EntryInfo> data) {
     WidgetsBinding.instance.addPostFrameCallback(
-        (_) => _logScroll.hasClients ? _logScroll.jumpTo(widget.view.apiViewState.logScrollPosition) : null);
+        (_) => _logScroll.hasClients ? _logScroll.jumpTo(widget.apiViewState.logScrollPosition) : null);
     data ??= {};
     final list = data.keys.toList(growable: false);
     return Scrollbar(
@@ -106,12 +106,12 @@ class _APIViewPageState extends State<APIViewPage> {
               final title = list[i];
               final body = data[title];
               return ValueListenableBuilder(
-                  valueListenable: widget.view.apiViewState.getTileNotify(title),
+                  valueListenable: widget.apiViewState.getTileNotify(title),
                   builder: (_, expanded, __) => ExpansionTile(
                         initiallyExpanded: expanded,
                         title: Text('$title ${body == null ? ' *' : ''}'),
                         onExpansionChanged: (open) {
-                          widget.view.apiViewState.setTileState(title, open);
+                          widget.apiViewState.setTileState(title, open);
                           if (open && body == null) _bLoC.getAPIInfo(title);
                         },
                         children: _apiInfo(body),
