@@ -39,8 +39,6 @@ class _ServerFormState extends State<_ServerForm> {
       'wsToken': widget.srv.wsToken
     }.map((key, value) => MapEntry(key, TextEditingController(text: widget.saved?.getString(key) ?? value)));
     _ctlBool = {
-      'logger': widget.srv.logger,
-      'control': widget.srv.control,
       'totpSalt': widget.srv.totpSalt,
     }.map((key, value) => MapEntry(key, ValueNotifier<bool>(widget.saved?.getBool(key) ?? value)));
 
@@ -100,8 +98,6 @@ class _ServerFormState extends State<_ServerForm> {
                     port: int.parse(_ctlStr['port'].text),
                     token: _ctlStr['token'].text,
                     wsToken: _ctlStr['wsToken'].text,
-                    logger: _ctlBool['logger'].value,
-                    control: _ctlBool['control'].value,
                     totpSalt: _ctlBool['totpSalt'].value));
               }
             },
@@ -153,16 +149,7 @@ class _ServerFormState extends State<_ServerForm> {
                   decoration: InputDecoration(labelText: 'Token'),
                   controller: _ctlStr['token'],
                   isVisible: false,
-                ),
-                switchListTileTap(
-                  _ctlBool['logger'],
-                  contentPadding: EdgeInsets.zero,
-                  title: Text('Log'),
-                ),
-                switchListTileTap(
-                  _ctlBool['control'],
-                  contentPadding: EdgeInsets.zero,
-                  title: Text('Control'),
+                  validator: (v) => v == '' ? 'Token must be not empty' : null,
                 ),
                 switchListTileTap(
                   _ctlBool['totpSalt'],
@@ -318,7 +305,10 @@ Future<T> dialogSelectOne<T>(BuildContext context, List<String> items,
 }
 
 Widget textFormFieldPassword(BuildContext context,
-    {TextEditingController controller, bool isVisible = false, InputDecoration decoration}) {
+    {TextEditingController controller,
+    bool isVisible = false,
+    InputDecoration decoration,
+    FormFieldValidator<String> validator}) {
   final _isVisible = ValueNotifier<bool>(isVisible);
   final iconTheme = IconTheme.of(context);
   Color iconColor;
@@ -338,7 +328,7 @@ Widget textFormFieldPassword(BuildContext context,
                 autovalidate: true,
                 validator: (v) {
                   if (v.contains(' ')) return 'Don\'t use spaces!';
-                  return null;
+                  return validator == null ? null : validator(v);
                 },
               ),
               IconButton(

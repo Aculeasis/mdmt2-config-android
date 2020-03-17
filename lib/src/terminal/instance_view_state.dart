@@ -81,8 +81,6 @@ class _MainStates {
     // model
     'modelIndex': ValueNotifier<int>(1),
     'sampleIndex': ValueNotifier<int>(1),
-    // Перехват сообщения для сервера (command.php?qry=)
-    'catchQryStatus': ValueNotifier<bool>(false),
     // Позиция скрола логгера
     'logScrollPosition': ValueNotifier<double>(.0),
     // TTS, ask, voice

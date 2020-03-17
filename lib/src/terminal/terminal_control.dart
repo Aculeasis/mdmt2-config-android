@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:mdmt2_config/src/servers/server_data.dart';
+import 'package:mdmt2_config/src/servers/servers_controller.dart';
 import 'package:mdmt2_config/src/terminal/instance_view_state.dart';
 import 'package:mdmt2_config/src/terminal/log.dart';
 import 'package:mdmt2_config/src/terminal/terminal_client.dart';
@@ -21,6 +22,10 @@ abstract class _BaseCMD {
 
 class _InternalCommand extends _BaseCMD {
   _InternalCommand(method, params) : super(method, params);
+}
+
+class _InternalCommandAlways extends _BaseCMD {
+  _InternalCommandAlways(method, params) : super(method, params);
 }
 
 class _ExternalJRPC extends _BaseCMD {
@@ -62,12 +67,18 @@ class TerminalControl extends TerminalClient {
   final _externalStreamCMD = StreamController<_BaseCMD>();
   final InstanceViewState view;
   final Reconnect reconnect;
+  final changeFnCallback _change;
   _ReconnectStage _reconnectStage = _ReconnectStage.no;
 
-  TerminalControl(ServerData server, SavedStateData saved, log, this.view, this.reconnect)
-      : super(server, WorkingMode.controller, saved, 'Controller', log: log) {
+  TerminalControl(ServerData server, SavedStateData saved, log, this.view, this.reconnect, this._change)
+      : super(server, saved, log) {
     subscribeTo.addAll(view.buttons.keys);
     _externalStreamCMD.stream.listen((e) {
+      if (e is _InternalCommandAlways) {
+        _externalCMDAlways(e.method.toLowerCase());
+        return;
+      }
+
       if (stage != ConnectStage.work) return;
       if (e is _InternalCommand)
         _externalCMD(e.method.toLowerCase(), e.params);
@@ -82,6 +93,7 @@ class TerminalControl extends TerminalClient {
   Stream<List<BackupLine>> get streamBackupList => _sendBackupList.stream;
 
   // Для внешних вызовов
+  executeChange(String cmd, {dynamic data}) => _externalStreamCMD.add(_InternalCommandAlways(cmd, data));
   executeMe(String cmd, {dynamic data}) => _externalStreamCMD.add(_InternalCommand(cmd, data));
   callJRPCExternal(String method, {params, AsyncResponseHandler handler, bool isNotify = false, Duration timeout}) =>
       _externalStreamCMD.add(_ExternalJRPC(method, params, handler, isNotify, timeout));
@@ -95,8 +107,6 @@ class TerminalControl extends TerminalClient {
   }
 
   @override
-  onLogger(dynamic msg) => sendSelfClose(error: 'FIXME onLogger');
-  @override
   onClose(error, type) {
     if (error == null && _reconnectStage == _ReconnectStage.really && type == WorkSignalsType.selfClose)
       reconnect.activate();
@@ -107,6 +117,9 @@ class TerminalControl extends TerminalClient {
   onOk() {
     _reconnectStage = _ReconnectStage.no;
     view.reset();
+    if (server.log.value) _logSubscriber(true);
+    if (server.qry.value) _cmdSubscriber(true);
+
     callJRPC('get',
         params: ['listener', 'volume', 'mvolume', 'mstate'],
         handler: AsyncResponseHandler((_, response) {
@@ -123,20 +136,25 @@ class TerminalControl extends TerminalClient {
             for (String cmd in subscribeTo) addRequestHandler('notify.$cmd', _handleNotify);
           }
         }, null));
-    if (view.states['catchQryStatus'].value) _cmdSubscriber(true);
   }
 
-  void _cmdSubscriber(bool subscribe) {
-    final cmd = subscribe ? 'subscribe' : 'unsubscribe';
-    callJRPC(cmd,
-        params: ['cmd'],
+  void _logSubscriber(bool subscribe) => _baseSubscriber(subscribe, 'log', () {
+        if (subscribe != server.log.value) _change(server, log: subscribe);
+      });
+
+  void _cmdSubscriber(bool subscribe) => _baseSubscriber(subscribe, 'cmd', () {
+        if (subscribe != server.qry.value) _change(server, qry: subscribe);
+      });
+
+  void _baseSubscriber(bool subscribe, String cmd, Function successCallback) {
+    if (stage != ConnectStage.work) return successCallback();
+    callJRPC(subscribe ? 'subscribe' : 'unsubscribe',
+        params: [cmd],
         handler: AsyncResponseHandler((method, response) {
           if ((_getResponseAs(method, response) ?? false)) {
-            if (subscribe)
-              addRequestHandler('notify.cmd', _handleNotify);
-            else
-              removeRequestHandler('notify.cmd');
-            view.states['catchQryStatus'].value = subscribe;
+            final target = 'notify.$cmd';
+            subscribe ? addRequestHandler(target, _handleNotify) : removeRequestHandler(target);
+            successCallback();
           }
         }, null));
   }
@@ -145,12 +163,16 @@ class TerminalControl extends TerminalClient {
     if (_seeInToads.hasListener) _seeInToads.add(msg);
   }
 
-  void _externalCMD(String cmd, dynamic data) {
+  void _externalCMDAlways(String cmd) {
     if (cmd == 'qry') {
-      _cmdSubscriber(!view.states['catchQryStatus'].value);
-      return;
-    }
+      _cmdSubscriber(!server.qry.value);
+    } else if (cmd == 'log') {
+      _logSubscriber(!server.log.value);
+    } else
+      _callToast('Unknown command: "$cmd"');
+  }
 
+  void _externalCMD(String cmd, dynamic data) {
     bool wrongData() => data == null || (data is String && data == '');
     dynamic params;
     if (cmd == 'listener') {
@@ -236,6 +258,10 @@ class TerminalControl extends TerminalClient {
       return;
     }
     switch (method) {
+      case 'log':
+        final logList = _getArg<List>(request);
+        if (logList != null) log.addFromResponse(logList);
+        break;
       case 'backup':
         final value = (_getFirstArg<String>(request) ?? 'error').toUpperCase();
         _callToast('Backup: $value');
@@ -292,6 +318,18 @@ class TerminalControl extends TerminalClient {
     dynamic error;
     try {
       result = request.params['args'][0];
+    } catch (e) {
+      error = e;
+    }
+    if (result == null) pPrint('Error parsing $request: $error');
+    return result;
+  }
+
+  T _getArg<T>(Request request) {
+    T result;
+    dynamic error;
+    try {
+      result = request.params['args'];
     } catch (e) {
       error = e;
     }

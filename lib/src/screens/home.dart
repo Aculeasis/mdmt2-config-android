@@ -10,7 +10,6 @@ import 'package:mdmt2_config/src/screens/settings.dart';
 import 'package:mdmt2_config/src/servers/server_data.dart';
 import 'package:mdmt2_config/src/servers/servers_controller.dart';
 import 'package:mdmt2_config/src/settings/misc_settings.dart';
-import 'package:mdmt2_config/src/terminal/terminal_instance.dart';
 import 'package:provider/provider.dart';
 
 enum ServerMenu { connect, edit, remove, view, stop, clone, clear }
@@ -92,63 +91,46 @@ class HomePage extends StatelessWidget {
         _openInstancePage(context, _server, servers);
     }
 
-    final state = CollectActualServerState(server);
     return ListTile(
-      leading: _serverIcon(context, state, server),
-      title: Text(
-        '${server.name}',
-        maxLines: 1,
-      ),
-      onTap: () {
-        if (state.isControlled) _openInstancePage(context, server, servers);
-      },
-      subtitle: Text(state.subtitle, maxLines: 2, overflow: TextOverflow.ellipsis),
+      leading: _serverIcon(context, server),
+      title: Text('${server.name}', maxLines: 1),
+      onTap: () => server.inst != null ? _openInstancePage(context, server, servers) : null,
+      subtitle: Text(server.inst?.subtitle ?? '', maxLines: 2, overflow: TextOverflow.ellipsis),
       trailing: PopupMenuButton(
         itemBuilder: (context) => [
-          if (state.isPartialLogger || state.isPartialControl)
+          if (server.allowToRun)
             PopupMenuItem(
               child: Row(
                 children: <Widget>[
-                  Icon(Icons.settings_backup_restore),
+                  Icon(server.inst == null ? Icons.cast_connected : Icons.settings_backup_restore),
                   VerticalDivider(),
-                  Text('Run ${state.isPartialLogger ? 'Logger' : 'Maintence'}')
+                  Text(server.inst == null ? 'Connect' : 'Reconnect')
                 ],
               ),
               value: ServerMenu.connect,
             ),
-          if (state.isEnabled && !(state.isControlled && state.work))
-            PopupMenuItem(
-              child: Row(
-                children: <Widget>[
-                  Icon(Icons.cast_connected),
-                  VerticalDivider(),
-                  Text(state.isControlled ? 'Reconnect' : 'Connect')
-                ],
-              ),
-              value: ServerMenu.connect,
-            ),
-          if (state.isControlled)
+          if (server.inst != null)
             PopupMenuItem(
               child: Row(
                 children: <Widget>[Icon(Icons.open_in_new), VerticalDivider(), Text('View')],
               ),
               value: ServerMenu.view,
             ),
-          if (state.isControlled && state.work)
+          if (server.inst?.work == true)
             PopupMenuItem(
               child: Row(
                 children: <Widget>[Icon(Icons.stop), VerticalDivider(), Text('Stop')],
               ),
               value: ServerMenu.stop,
             ),
-          if (state.isControlled && !state.work)
+          if (server.inst?.work == false)
             PopupMenuItem(
               child: Row(
                 children: <Widget>[Icon(Icons.clear), VerticalDivider(), Text('Clear')],
               ),
               value: ServerMenu.clear,
             ),
-          if (!state.isControlled || !state.work)
+          if (server.allowToRun)
             PopupMenuItem(
               child: Row(
                 children: <Widget>[Icon(Icons.edit), VerticalDivider(), Text('Edit')],
@@ -161,7 +143,7 @@ class HomePage extends StatelessWidget {
             ),
             value: ServerMenu.clone,
           ),
-          if (!state.isControlled || !state.work)
+          if (server.allowToRun)
             PopupMenuItem(
               child: Row(
                 children: <Widget>[Icon(Icons.remove_circle_outline), VerticalDivider(), Text('Delete')],
@@ -203,18 +185,18 @@ class HomePage extends StatelessWidget {
     );
   }
 
-  Widget _serverIcon(BuildContext context, CollectActualServerState state, ServerData server) {
+  Widget _serverIcon(BuildContext context, ServerData server) {
     Color color;
     final size = Theme.of(context).iconTheme.size ?? 24;
-    if (!state.isControlled) {
-    } else if (state.work && state.errors == 0)
+    if (server.inst == null)
+      color = null;
+    else if (server.inst.work)
       color = Colors.green;
-    else if (!state.work && state.errors == 0)
-      color = Colors.cyan;
-    else if (state.errors < state.counts)
-      color = Colors.yellow;
-    else
+    else if (server.inst.hasCriticalError)
       color = Colors.red;
+    else
+      color = Colors.cyan;
+
     final icon = Icon(
       Icons.pets,
       color: color,

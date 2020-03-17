@@ -37,6 +37,6 @@ Widget reRunButton(ServerData server, Function runCallback) {
       valueListenable: server,
       builder: (_, __, ___) {
         return IconButton(
-            icon: Icon(Icons.settings_backup_restore), onPressed: server.allowToRerun ? runCallback : null);
+            icon: Icon(Icons.settings_backup_restore), onPressed: server.allowToRun ? runCallback : null);
       });
 }

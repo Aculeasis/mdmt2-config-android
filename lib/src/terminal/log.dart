@@ -11,16 +11,9 @@ import 'package:rxdart/rxdart.dart';
 
 enum LogLevel { debug, info, warn, error, critical, system }
 
-final _logLvlMap = {
-  'DEBUG': LogLevel.debug,
-  'INFO ': LogLevel.info,
-  'WARN ': LogLevel.warn,
-  'ERROR': LogLevel.error,
-  'CRIT ': LogLevel.critical,
-  'REMOTE': LogLevel.system,
-};
+final Map<int, LogLevel> _logLvlMap = LogLevel.values.asMap().map((key, value) => MapEntry((key + 1) * 10, value));
 
-final Map<LogLevel, String> _mapLvlLog = _logLvlMap.map((key, value) => MapEntry(value, key));
+final Map<LogLevel, int> _mapLvlLog = _logLvlMap.map((key, value) => MapEntry(value, key));
 
 class LogLine {
   final List<String> callers;
@@ -29,18 +22,13 @@ class LogLine {
   final DateTime time;
   LogLine(callers, this.msg, this.lvl, this.time) : this.callers = callers ?? List(0);
 
-  LogLine.fromJson(Map<String, dynamic> json)
-      : callers = List<String>.from(json['callers'], growable: false) ?? List(0),
-        msg = notNull(json['msg'], 'msg'),
-        lvl = _logLvlMap[notNull(json['lvl'], 'lvl')],
-        time = timeToDateTime(notNull(json['time'], 'time'));
+  LogLine.fromJson(List<dynamic> json)
+      : time = timeToDateTime(notNull(json[0], 'time')),
+        callers = List<String>.from(json[1], growable: false) ?? List(0),
+        msg = notNull(json[2], 'msg'),
+        lvl = _logLvlMap[notNull(json[3], 'lvl')];
 
-  Map<String, dynamic> toJson() => {
-        'callers': callers,
-        'msg': msg,
-        'lvl': _mapLvlLog[lvl],
-        'time': dateTimeToTime(time),
-      };
+  List<dynamic> toJson() => [dateTimeToTime(time), callers, msg, _mapLvlLog[lvl]];
 
   static DateTime timeToDateTime(double time) => DateTime.fromMillisecondsSinceEpoch((time * 1000).toInt());
   static double dateTimeToTime(DateTime time) => time.toUtc().millisecondsSinceEpoch / 1000;
@@ -73,7 +61,7 @@ class Log {
         _fileLog?.writeLine(jsonEncode(line));
         _add(line);
       } else {
-        _addFromJson(line);
+        _addFromResponse(line);
       }
     });
     _requestsStream.stream.listen((cmd) {
@@ -101,7 +89,7 @@ class Log {
     assert(!_addLogLineSubscription.isPaused);
     _addLogLineSubscription.pause();
     _fileLog.readAll().listen((line) {
-      _addFromJson(line, isRestore: true);
+      _restoreFromJson(line);
       counts++;
     }, onError: (e) {
       _restoreFinished(counts);
@@ -139,7 +127,7 @@ class Log {
   }
 
   void clear() => _requestsStream.add('clear');
-  void addFromJson(dynamic line) => _addLogLineStream.add(line);
+  void addFromResponse(List<dynamic> line) => _addLogLineStream.add(line);
   void addSystem(String msg, {List<String> callers}) =>
       _addLogLineStream.add(LogLine(callers, msg, LogLevel.system, DateTime.now()));
 
@@ -168,16 +156,26 @@ class Log {
     return _addActual(line, isRestore);
   }
 
-  bool _addFromJson(dynamic line, {isRestore = false}) {
+  bool _addFromResponse(List<dynamic> line, {isRestore = false}) {
     LogLine logLine;
     try {
-      logLine = LogLine.fromJson(jsonDecode(line));
-      if (!isRestore) _fileLog?.writeLine(line);
+      logLine = LogLine.fromJson(line);
+      if (!isRestore) _fileLog?.writeLine(jsonEncode(line));
     } catch (e) {
       logLine = LogLine(null, 'Recive broken logline "$line": $e', LogLevel.system, DateTime.now());
       if (!isRestore) _fileLog?.writeLine(jsonEncode(logLine));
     }
     return _add(logLine, isRestore: isRestore);
+  }
+
+  bool _restoreFromJson(dynamic line) {
+    LogLine logLine;
+    try {
+      logLine = LogLine.fromJson(jsonDecode(line));
+    } catch (e) {
+      logLine = LogLine(null, 'Restore broken logline "$line": $e', LogLevel.system, DateTime.now());
+    }
+    return _add(logLine, isRestore: true);
   }
 
   _rebuildActual() => _actualLog

@@ -7,6 +7,7 @@ class _N {
   static const autoReconnectAfterReboot = 'ms_arar';
   static const saveAppState = 'ms_sas';
   static const theme = 'app_theme';
+  static const forWides = 'ms_wides';
 }
 
 class MiscSettings extends ChangeNotifier {
@@ -20,6 +21,8 @@ class MiscSettings extends ChangeNotifier {
   final saveAppState = ValueNotifier<bool>(true);
   // Тема
   final theme = ValueNotifier<String>('Dark');
+  // адаптировать UI для широких экранов
+  final forWides = ValueNotifier<bool>(false);
   // Задержка всяких обновлений для уменьшения частоты перерисовки виджетов
   final throttleTime = Duration(milliseconds: 60);
 
@@ -39,12 +42,14 @@ class MiscSettings extends ChangeNotifier {
     openOnRunning.value = p.getBool(_N.openOnRunning) ?? openOnRunning.value;
     autoReconnectAfterReboot.value = p.getInt(_N.autoReconnectAfterReboot) ?? autoReconnectAfterReboot.value;
     saveAppState.value = p.getBool(_N.saveAppState) ?? saveAppState.value;
-    theme.value = p.get(_N.theme) ?? theme.value;
+    theme.value = p.getString(_N.theme) ?? theme.value;
+    forWides.value = p.getBool(_N.forWides) ?? forWides.value;
 
     openOnRunning.addListener(() => p.setBool(_N.openOnRunning, openOnRunning.value));
     autoReconnectAfterReboot.addListener(() => p.setInt(_N.autoReconnectAfterReboot, autoReconnectAfterReboot.value));
     saveAppState.addListener(() => p.setBool(_N.saveAppState, saveAppState.value));
     theme.addListener(() => p.setString(_N.theme, theme.value));
+    forWides.addListener(() => p.setBool(_N.forWides, forWides.value));
 
     isLoaded = true;
     notifyListeners();

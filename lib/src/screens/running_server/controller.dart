@@ -11,6 +11,14 @@ import 'package:mdmt2_config/src/terminal/terminal_client.dart';
 import 'package:mdmt2_config/src/terminal/terminal_control.dart';
 import 'package:mdmt2_config/src/widgets.dart';
 
+class _WidgetsQueue {
+  final List<Widget> _widgets;
+  int _index = -1;
+  int get length => _widgets.length;
+  Widget get next => ++_index < _widgets.length ? _widgets[_index] : DummyWidget;
+  _WidgetsQueue(this._widgets);
+}
+
 class ControllerView extends StatefulWidget {
   final TerminalControl control;
   final InstanceViewState view;
@@ -114,7 +122,7 @@ class _ControllerViewState extends State<ControllerView> {
             divider('Maintenance'),
             Padding(
               padding: EdgeInsets.symmetric(horizontal: 15),
-              child: maintenance2Line(),
+              child: _maintenance(context),
             ),
           ],
         ),
@@ -122,77 +130,63 @@ class _ControllerViewState extends State<ControllerView> {
     );
   }
 
-  Widget maintenance2Line() {
+  Widget _maintenance(BuildContext context) {
+    const fractionColumnWidth = FractionColumnWidth(0.02);
+    const buttonColumn = 3;
     return Table(
-      columnWidths: {for (int i = 1; i < 6; i += 2) i: FractionColumnWidth(0.02)},
+      columnWidths: {for (int i = 1; i < buttonColumn * 2; i += 2) i: fractionColumnWidth},
       defaultVerticalAlignment: TableCellVerticalAlignment.middle,
-      children: [maintenanceLine1(), maintenanceLine2()],
+      children: _maintenanceBody(buttonColumn),
     );
   }
 
-  TableRow maintenanceLine1() {
-    return TableRow(children: [
-      RaisedButton(
-        padding: EdgeInsets.all(2),
-        onPressed: _isConnected ? () => widget.control.executeMe('ping') : null,
-        child: Text('Ping'),
-      ),
-      DummyWidget,
-      ValueListenableBuilder(
-          valueListenable: widget.view.buttons['terminal_stop'],
-          builder: (_, busy, __) => RaisedButton(
-                padding: EdgeInsets.all(2),
-                onPressed: _isConnected && !busy
-                    ? () => dialogYesNo(context, 'Reload server?', '', 'Reload', 'Cancel').then((value) {
-                          if (value) widget.control.executeMe('maintenance.reload');
-                        })
-                    : null,
-                child: Text('Reload'),
-              )),
-      DummyWidget,
-      ValueListenableBuilder(
-          valueListenable: widget.view.buttons['terminal_stop'],
-          builder: (_, busy, __) => RaisedButton(
-                padding: EdgeInsets.all(2),
-                onPressed: _isConnected && !busy
-                    ? () => dialogYesNo(context, 'Stop server?', '', 'Stop', 'Cancel').then((value) {
-                          if (value) widget.control.executeMe('maintenance.stop');
-                        })
-                    : null,
-                child: Text('Stop'),
-              )),
-      DummyWidget,
-      _radioButton(widget.view.listenerOnOff, label: 'Listen', callBack: () => widget.control.executeMe('listener')),
-    ]);
+  List<TableRow> _maintenanceBody(int buttonCount) {
+    final radio = _maintenanceRadios();
+    final buttons = _maintenanceButtons();
+    int rows = buttons.length ~/ buttonCount * buttonCount;
+    if (rows < radio.length) rows = radio.length;
+
+    return [
+      for (int r = 0; r < rows; r++)
+        TableRow(children: [
+          for (int c = 0; c < buttonCount; c++) ...[buttons.next, DummyWidget],
+          radio.next
+        ])
+    ];
   }
 
-  TableRow maintenanceLine2() {
-    return TableRow(children: [
-      ValueListenableBuilder(
-          valueListenable: widget.view.buttons['manual_backup'],
-          builder: (_, busy, __) => RaisedButton(
-                padding: EdgeInsets.all(2),
-                onPressed: _isConnected && !busy ? () => widget.control.executeMe('backup.manual') : null,
-                child: Text('Backup'),
-              )),
-      DummyWidget,
-      ValueListenableBuilder(
-          valueListenable: widget.view.buttons['terminal_stop'],
-          builder: (context, busy, __) => RaisedButton(
-                padding: EdgeInsets.all(2),
-                onPressed: _isConnected && !busy ? () => _openPage(context, 'backup') : null,
-                child: Text('Restore*'),
-              )),
-      DummyWidget,
-      RaisedButton(
-        padding: EdgeInsets.all(2),
-        onPressed: () => _openPage(context, 'info'),
-        child: Text('API'),
-      ),
-      DummyWidget,
-      _radioButton(widget.view.states['catchQryStatus'], label: 'QRY', callBack: () => widget.control.executeMe('qry')),
-    ]);
-  }
+  _WidgetsQueue _maintenanceButtons() => _WidgetsQueue([
+        RaisedButton(
+          padding: EdgeInsets.all(2),
+          onPressed: _isConnected ? () => widget.control.executeMe('ping') : null,
+          child: Text('Ping'),
+        ),
+        _raisedButton(
+            widget.view.buttons['terminal_stop'],
+            'Reload',
+            (_) => dialogYesNo(context, 'Reload server?', '', 'Reload', 'Cancel').then((value) {
+                  if (value) widget.control.executeMe('maintenance.reload');
+                })),
+        _raisedButton(
+            widget.view.buttons['terminal_stop'],
+            'Stop',
+            (_) => dialogYesNo(context, 'Stop server?', '', 'Stop', 'Cancel').then((value) {
+                  if (value) widget.control.executeMe('maintenance.stop');
+                })),
+        _raisedButton(widget.view.buttons['manual_backup'], 'Backup', (_) => widget.control.executeMe('backup.manual')),
+        _raisedButton(widget.view.buttons['terminal_stop'], 'Restore*', (context) => _openPage(context, 'backup')),
+        RaisedButton(
+          padding: EdgeInsets.all(2),
+          onPressed: () => _openPage(context, 'info'),
+          child: Text('API'),
+        )
+      ]);
+
+  _WidgetsQueue _maintenanceRadios() => _WidgetsQueue([
+        _radioButton(widget.srv.log, label: 'Log', callBack: () => widget.control.executeChange('log'), offline: true),
+        _radioButton(widget.srv.qry, label: 'QRY', callBack: () => widget.control.executeChange('qry'), offline: true),
+        _radioButton(widget.view.listenerOnOff, label: 'Listen', callBack: () => widget.control.executeMe('listener'))
+      ]);
 
   Widget terminalStatusLine() {
     return Row(
@@ -356,7 +350,16 @@ class _ControllerViewState extends State<ControllerView> {
     ]);
   }
 
-  Widget _radioButton(ValueNotifier<bool> valueListenable, {Function callBack, String label}) {
+  Widget _raisedButton(ValueNotifier<bool> valueListenable, String label, callBack(BuildContext context)) =>
+      ValueListenableBuilder(
+          valueListenable: valueListenable,
+          builder: (context, busy, __) => RaisedButton(
+                padding: EdgeInsets.all(2),
+                onPressed: _isConnected && !busy ? () => callBack(context) : null,
+                child: Text(label),
+              ));
+
+  Widget _radioButton(ValueNotifier<bool> valueListenable, {Function callBack, String label, bool offline = false}) {
     final themeOff = Theme.of(context);
     final themeOn = themeOff.copyWith(disabledColor: themeOff.toggleableActiveColor);
     return ValueListenableBuilder(
@@ -367,7 +370,7 @@ class _ControllerViewState extends State<ControllerView> {
         ),
         builder: (_, isCatch, child) => RaisedButton(
               padding: EdgeInsets.all(2),
-              onPressed: _isConnected ? callBack : null,
+              onPressed: _isConnected || offline ? callBack : null,
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.center,

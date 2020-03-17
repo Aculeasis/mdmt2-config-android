@@ -22,7 +22,7 @@ abstract class ServersManager extends _BLoC {
     super.dispose();
   }
 
-  bool _removeInstance(ServerData server, {bool callDispose = true, bool notify = true});
+  bool _removeInstance(ServerData server, {bool notify = true});
 
   bool _instanceMayRemoved(ServerData server) => server?.inst == null || !server.inst.work;
 
@@ -108,6 +108,19 @@ abstract class ServersManager extends _BLoC {
     debugPrint('* start=${swap.start}, length=${swap.length}');
     notifyListeners();
     await _db.updateAll(_array.iterable, start: swap.start, length: swap.length);
+  }
+
+  Future<void> _changeInput(ServerData server, {bool log, bool qry}) async {
+    final index = _array.indexOf(server.name);
+    assert((log ?? qry) != null);
+    assert(index != -1);
+    log ??= server.log.value;
+    qry ??= server.qry.value;
+    if (index == -1 || (log == server.log.value && qry == server.qry.value)) return;
+    debugPrint('${server.name} change log: ${server.log.value} -> $log; qry ${server.qry.value} -> $qry');
+    server.log.value = log;
+    server.qry.value = qry;
+    await _db.updateState(server);
   }
 
   Future<void> _restore() async {

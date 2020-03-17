@@ -11,7 +11,6 @@ import 'package:mdmt2_config/src/terminal/log.dart';
 import 'package:mdmt2_config/src/terminal/terminal_client.dart';
 import 'package:mdmt2_config/src/terminal/terminal_control.dart';
 import 'package:mdmt2_config/src/terminal/terminal_instance.dart';
-import 'package:mdmt2_config/src/terminal/terminal_logger.dart';
 import 'package:native_state/native_state.dart';
 import 'package:rxdart/rxdart.dart';
 
@@ -44,7 +43,7 @@ class ServersController extends ServersManager {
     } else if (event.signal == WorkingStatChange.close || event.signal == WorkingStatChange.closeOnError) {
       _state.active--;
       _state.closing--;
-      if (event.server.inst?.work == false) event.server.inst?.reconnect?.start();
+      if (event.server.inst?.work == false) event.server.inst.reconnect.start();
     } else
       return;
     _sendState();
@@ -70,17 +69,16 @@ class ServersController extends ServersManager {
     for (var server in _array.iterable) _stopInput(server);
   }
 
-  bool _removeInstance(ServerData server, {bool callDispose = true, bool notify = true}) {
+  bool _removeInstance(ServerData server, {bool notify = true}) {
     if (!_stopInput(server)) return false;
     final inst = server.inst;
     server.inst = null;
-    final diff = (inst.logger != null ? 1 : 0) + (inst.control != null ? 1 : 0);
-    _state.counts -= diff;
-    if (callDispose) {
-      if (diff > 0 && notify) _sendState();
-      inst.dispose();
+    _state.counts--;
+    inst.dispose();
+    if (notify) {
+      _sendState();
+      server.notifyListeners();
     }
-    if (notify) server.notifyListeners();
     return true;
   }
 
@@ -96,84 +94,27 @@ class ServersController extends ServersManager {
   }
 
   void _runInput(ServerData server, {returnServerCallback result}) {
-    if (server.inst != null) {
-      if (!(server.control || server.logger)) {
-        clear(server);
-        return;
-      }
-      _upgradeInstance(server);
-    } else {
+    if (server.inst == null) {
       _makeInstance(server);
+      _sendState();
     }
-    _runInstance(server?.inst?.logger);
-    _runInstance(server?.inst?.control);
-
-    if (result != null && server.inst != null) result(server);
+    if (!server.inst.work) server.inst.control.sendRun();
+    if (result != null) result(server);
   }
 
-  void _runInstance(TerminalClient inst) {
-    if (inst?.getStage == ConnectStage.wait) {
-      inst.sendRun();
-    }
-  }
-
-  _makeInstance(ServerData server, {TerminalInstance instance, bool restoreView = false}) {
-    SavedStateData _getState() => MiscSettings().saveAppState.value ? _saved.child('states_${server.sid}') : null;
-
-    instance ??= TerminalInstance(null, null, null, InstanceViewState(style.clone(), _getState(), restore: restoreView),
-        Reconnect(() => run(server)));
-    int incCounts = 0;
-    if (server.logger) {
-      instance.log ??= Log(instance.view.style, instance.view.unreadMessages, _getState(), server.sid);
-      if (instance.logger == null) {
-        instance.logger = TerminalLogger(server, _getState(), instance.log);
-        instance.logger.stateStream.listen(_instanceSignalCollector);
-      } else {
-        instance.logger.setLog = instance.log;
-      }
-      incCounts++;
-    } else {
-      instance.logger?.dispose();
-      instance.logger = null;
-      instance.log?.dispose();
-      instance.log = null;
-    }
-    if (server.control) {
-      if (instance.control == null) {
-        instance.control = TerminalControl(server, _getState(), instance.log, instance.view, instance.reconnect);
-        instance.control.stateStream.listen(_instanceSignalCollector);
-      } else {
-        instance.control.setLog = instance.log;
-      }
-      incCounts++;
-    } else {
-      instance.control?.dispose();
-      instance.control = null;
-    }
-
+  void _makeInstance(ServerData server, {bool restoreView = false}) {
     assert(server.inst == null);
-    assert((instance.logger == null && instance.log == null) || instance.logger != null && instance.log != null);
+    final state = MiscSettings().saveAppState.value ? _saved.child('states_${server.sid}') : null;
 
-    if ((instance.logger ?? instance.control) != null) {
-      assert(instance.view != null && instance.reconnect != null);
-      server.inst = instance;
-      _state.counts += incCounts;
-      if (incCounts > 0) _sendState();
-    } else
-      instance.dispose();
+    final reconnect = Reconnect(() => run(server));
+    final view = InstanceViewState(style.clone(), state, restore: restoreView);
+    final log = Log(view.style, view.unreadMessages, state, server.sid);
+    final control = TerminalControl(server, state, log, view, reconnect, change)
+      ..stateStream.listen(_instanceSignalCollector);
+
+    server.inst = TerminalInstance(control, log, view, reconnect);
+    _state.counts++;
     server.notifyListeners();
-  }
-
-  void _upgradeInstance(ServerData server) {
-    final instance = server.inst;
-    instance.reconnect.close();
-    if (instance.work) return debugPrint(' ***Still running ${server.name}');
-    if (((instance.logger != null) != server.logger || (instance.control != null) != server.control) &&
-        _removeInstance(server, callDispose: false, notify: false)) {
-      debugPrint(' ***Re-make ${server.name}');
-      _makeInstance(server, instance: instance);
-    } else
-      debugPrint(' ***Nope ${server.name}');
   }
 
   @override
@@ -195,5 +136,6 @@ class ServersController extends ServersManager {
       }
     }
     await LogsBox().dispose();
+    _sendState();
   }
 }

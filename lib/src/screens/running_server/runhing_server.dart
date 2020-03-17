@@ -8,6 +8,7 @@ import 'package:mdmt2_config/src/misc.dart';
 import 'package:mdmt2_config/src/screens/running_server/controller.dart';
 import 'package:mdmt2_config/src/servers/server_data.dart';
 import 'package:mdmt2_config/src/settings/log_style.dart';
+import 'package:mdmt2_config/src/settings/misc_settings.dart';
 import 'package:mdmt2_config/src/terminal/instance_view_state.dart';
 import 'package:mdmt2_config/src/terminal/log.dart';
 import 'package:mdmt2_config/src/terminal/terminal_control.dart';
@@ -26,127 +27,144 @@ class RunningServerPage extends StatefulWidget {
 }
 
 class _RunningServerPage extends State<RunningServerPage> with SingleTickerProviderStateMixin {
+  static const WideScreenWidth = 700;
+  static const MaxRightSideWidth = 400;
+
   TabController _tabController;
-  TerminalInstance _instance;
-  Log _log;
-  TerminalControl _control;
 
   @override
   void dispose() {
     super.dispose();
     _tabController.dispose();
-    widget.srv.removeListener(_instanceRelinkListener);
   }
 
   @override
   void initState() {
     super.initState();
-    _instanceRelink();
-    if (_instance == null) {
-      _tabController = TabController(length: 2, vsync: this, initialIndex: 0);
-    } else {
-      int initialIndex = _instance.view.states['pageIndex'].value;
-      if (initialIndex == 0 && _instance.log == null)
-        initialIndex = 1;
-      else if (initialIndex == 1 && _instance.control == null) initialIndex = 0;
-      _tabController = TabController(length: 2, vsync: this, initialIndex: initialIndex);
-      _tabController.addListener(_tabControllerListener);
-    }
-    widget.srv.addListener(_instanceRelinkListener);
+    final view = widget.srv.inst.view;
+    _tabController = TabController(length: 2, vsync: this, initialIndex: view.states['pageIndex'].value)
+      ..addListener(() => view.states['pageIndex'].value = _tabController.index);
   }
-
-  _instanceRelink() {
-    _instance = widget.srv.inst;
-    _log = _instance?.log;
-    _control = _instance?.control;
-  }
-
-  _instanceRelinkListener() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final inst = widget.srv.inst;
-      if (inst != _instance || inst?.log != _log || inst?.control != _control)
-        setState(() {
-          _tabController.removeListener(_tabControllerListener);
-          _instanceRelink();
-          if (_instance != null) _tabController.addListener(_tabControllerListener);
-        });
-    });
-  }
-
-  _tabControllerListener() => _instance.view.states['pageIndex'].value = _tabController.index;
 
   @override
   Widget build(BuildContext context) {
+    final width = MediaQuery.of(context).size.width;
+    return MiscSettings().forWides.value && width >= WideScreenWidth
+        ? _wideBody(context, width.truncate())
+        : _body(context);
+  }
+
+  Widget _body(BuildContext context) {
     return Scaffold(
       appBar: PreferredSize(
           preferredSize: Size.fromHeight(kToolbarHeight),
           child: AppBar(
             titleSpacing: 0,
             title: reRunButton(widget.srv, widget.runCallback),
-            actions: _actions(),
+            actions: [_actions(widget.srv.inst.view)],
             bottom: TabBar(controller: _tabController, tabs: <Widget>[
               Text('Log'),
               Text('Control'),
             ]),
           )),
       body: TabBarView(controller: _tabController, children: <Widget>[
-        _oneTab(context, _instance, _log),
-        _twoTab(context, _instance, _control),
+        _oneTab(context, widget.srv.inst),
+        _twoTab(context, widget.srv.inst),
       ]),
     );
   }
 
-  _actions() {
-    return [
-      IconButton(
-        icon: Icon(Icons.import_export),
-        onPressed: () {
-          final index = _instance != null ? _instance.view.states['pageIndex'].value : null;
-          if (index == 0)
-            _instance.view.states['logExpanded'].value = !_instance.view.states['logExpanded'].value;
-          else if (index == 1)
-            _instance.view.states['controlExpanded'].value = !_instance.view.states['controlExpanded'].value;
-        },
+  Widget _wideBody(BuildContext context, int width) {
+    int rightFlex = width ~/ 2;
+    rightFlex = rightFlex > MaxRightSideWidth ? MaxRightSideWidth : rightFlex;
+    final leftFlex = width - rightFlex;
+    debugPrint('left: $leftFlex, right: $rightFlex');
+    final instance = widget.srv.inst;
+    return Scaffold(
+      body: ValueListenableBuilder(
+        valueListenable: instance.view.states['pageIndex'],
+        builder: (context, index, _) => Row(
+          children: <Widget>[
+            Expanded(flex: leftFlex, child: _leftSide(context, instance, index)),
+            if (index == 1) Expanded(flex: rightFlex, child: _rightSide(context, instance))
+          ],
+        ),
       ),
-    ];
+    );
   }
 
-  Widget _oneTab(BuildContext context, TerminalInstance instance, Log log) {
+  Widget _leftSide(BuildContext context, TerminalInstance instance, int index) {
+    return Scaffold(
+      appBar: AppBar(
+        titleSpacing: 0,
+        title: reRunButton(widget.srv, widget.runCallback),
+        actions: [
+          IconButton(
+              icon: Icon(index == 0 ? Icons.chevron_left : Icons.chevron_right),
+              onPressed: () => _tabController.index = index == 0 ? 1 : 0),
+          _actions(instance.view, index: 0)
+        ],
+      ),
+      body: _oneTab(context, instance),
+    );
+  }
+
+  Widget _rightSide(BuildContext context, TerminalInstance instance) {
+    return Scaffold(
+      appBar: AppBar(
+        leading: DummyWidget,
+        actions: [_actions(instance.view, index: 1)],
+      ),
+      body: _twoTab(context, instance),
+    );
+  }
+
+  Widget _actions(InstanceViewState view, {int index}) {
+    return IconButton(
+      icon: Icon(Icons.import_export),
+      onPressed: () {
+        if ((index ?? view.states['pageIndex'].value) == 0)
+          view.states['logExpanded'].value = !view.states['logExpanded'].value;
+        else if (view.states['pageIndex'].value == 1)
+          view.states['controlExpanded'].value = !view.states['controlExpanded'].value;
+      },
+    );
+  }
+
+  Widget _oneTab(BuildContext context, TerminalInstance instance) {
+    if (instance == null) return DummyWidget;
     return Stack(
       children: <Widget>[
         Container(
           constraints: BoxConstraints.expand(),
-          child: log != null ? LogListView(log, instance.view) : _disabledBody(),
+          child: LogListView(instance.log, instance.view),
         ),
-        if (instance != null)
-          ValueListenableBuilder(
-              valueListenable: instance.view.states['logExpanded'],
-              builder: (_, expanded, child) => expanded ? child : DummyWidget,
-              child: Container(
-                color: Colors.black.withOpacity(.5),
-                child: log != null ? _loggerSettings(instance.view, log) : _disabledTop(),
-              )),
+        ValueListenableBuilder(
+            valueListenable: instance.view.states['logExpanded'],
+            builder: (_, expanded, child) => expanded ? child : DummyWidget,
+            child: Container(
+              color: Colors.black.withOpacity(.5),
+              child: _loggerSettings(instance.view, instance.log),
+            )),
       ],
     );
   }
 
-  Widget _twoTab(BuildContext context, TerminalInstance instance, TerminalControl control) {
+  Widget _twoTab(BuildContext context, TerminalInstance instance) {
+    if (instance == null) return DummyWidget;
     return Stack(
       children: <Widget>[
         Container(
           constraints: BoxConstraints.expand(),
-          child: control != null
-              ? ControllerView(control, instance.view, widget.srv, widget.runCallback)
-              : _disabledBody(),
+          child: ControllerView(instance.control, instance.view, widget.srv, widget.runCallback),
         ),
-        if (instance != null)
-          ValueListenableBuilder(
-              valueListenable: instance.view.states['controlExpanded'],
-              builder: (_, expanded, child) => expanded ? child : DummyWidget,
-              child: Container(
-                color: Colors.black.withOpacity(.8),
-                child: control != null ? _controllerSettings(control) : _disabledTop(),
-              )),
+        ValueListenableBuilder(
+            valueListenable: instance.view.states['controlExpanded'],
+            builder: (_, expanded, child) => expanded ? child : DummyWidget,
+            child: Container(
+              color: Colors.black.withOpacity(.8),
+              child: _controllerSettings(instance.control),
+            )),
       ],
     );
   }
@@ -481,30 +499,6 @@ class _LogListViewState extends State<LogListView> with SingleTickerProviderStat
       ]),
     );
   }
-}
-
-Widget _disabledTop() {
-  return Column(
-    mainAxisSize: MainAxisSize.min,
-    children: <Widget>[
-      Divider(
-        color: Colors.transparent,
-      ),
-      Center(child: Text('Disabled')),
-      Divider(
-        color: Colors.transparent,
-      ),
-    ],
-  );
-}
-
-Widget _disabledBody({Color backgroundColor}) {
-  return Container(
-    color: backgroundColor,
-    child: Center(
-      child: Text('Disabled'),
-    ),
-  );
 }
 
 Widget _drawButton(BuildContext context, String text) {

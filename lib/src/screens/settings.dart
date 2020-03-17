@@ -13,31 +13,33 @@ class SettingsPage extends StatelessWidget {
       appBar: AppBar(
         title: Text('Settings'),
       ),
-      body: Padding(
-          padding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.start,
-            children: <Widget>[
-              _themeSelector(context, misc.theme),
-              switchListTileTap(
-                misc.openOnRunning,
-                title: Text('Open at Run'),
-                subtitle: Text('Auto opening the server page at run'),
-              ),
-              ValueListenableBuilder(
-                  valueListenable: misc.autoReconnectAfterReboot,
-                  builder: (_, value, ___) => ListTile(
-                        title: Text('Reconnect after reboot'),
-                        subtitle: Text(value > 0 ? 'after $value seconds' : 'disabled'),
-                        onTap: () => uIntDialog(context, misc.autoReconnectAfterReboot, 'Delay [0: disabled]'),
-                      )),
-              switchListTileTap(
-                misc.saveAppState,
-                title: Text('Restore APP state after OOM'),
-                subtitle: Text('Clear all instances after change this setting'),
-              ),
-            ],
-          )),
+      body: ListView(
+        padding: EdgeInsets.all(10),
+        children: <Widget>[
+          _themeSelector(context, misc.theme),
+          switchListTileTap(
+            misc.openOnRunning,
+            title: Text('Open at Run'),
+            subtitle: Text('Auto opening the server page at run'),
+          ),
+          ValueListenableBuilder(
+              valueListenable: misc.autoReconnectAfterReboot,
+              builder: (_, value, ___) => ListTile(
+                    title: Text('Reconnect after reboot'),
+                    subtitle: Text(value > 0 ? 'after $value seconds' : 'disabled'),
+                    onTap: () => uIntDialog(context, misc.autoReconnectAfterReboot, 'Delay [0: disabled]'),
+                  )),
+          switchListTileTap(
+            misc.saveAppState,
+            title: Text('Restore APP state after OOM'),
+            subtitle: Text('Clear all instances after change this setting'),
+          ),
+          switchListTileTap(
+            misc.forWides,
+            title: Text('Adapted UI for wide screens'),
+          ),
+        ],
+      ),
     );
   }
 

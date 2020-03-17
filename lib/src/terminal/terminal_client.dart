@@ -17,11 +17,9 @@ const mDuplex = 'upgrade duplex';
 
 const DEEP_DEBUG = false;
 
-enum ConnectStage { wait, connected, connecting, sendAuth, sendDuplex, work, happy, closing }
+enum ConnectStage { wait, connected, connecting, sendAuth, sendDuplex, work, closing }
 
 enum WorkingStatChange { connecting, broken, connected, closing, close, closeOnError }
-
-enum WorkingMode { logger, controller }
 
 class WorkingNotification {
   final ServerData server;
@@ -129,17 +127,13 @@ abstract class TerminalClient {
   final _stateStream = StreamController<WorkingNotification>.broadcast();
   final _workSignal = StreamController<WorkSignals>();
   final ServerData server;
-  final WorkingMode mode;
-  @protected
-  Log log;
-  final String name;
+  final Log log;
   final SavedStateData _saved;
   IOWebSocketChannel _channel;
   StreamSubscription<dynamic> _listener;
   @protected
   ConnectStage stage = ConnectStage.wait;
   bool hasCriticalError;
-  set setLog(Log newLog) => log = newLog;
   ConnectStage get getStage => stage;
 
   // макс пул отправленных
@@ -161,7 +155,7 @@ abstract class TerminalClient {
   @protected
   void removeRequestHandler(String method) => _requestHandlers.remove(method);
 
-  TerminalClient(this.server, this.mode, this._saved, this.name, {this.log}) {
+  TerminalClient(this.server, this._saved, this.log) {
     _restoreCriticalError();
     _workSignal.stream.listen((event) {
       if (stage == ConnectStage.connecting) return;
@@ -188,7 +182,8 @@ abstract class TerminalClient {
     void _authHandler(String method, Response response) {
       if (stage == ConnectStage.sendAuth) {
         pPrint('$method SUCCESS: ${response.result}');
-        _sendPostAuth();
+        stage = ConnectStage.sendDuplex;
+        callJRPC(mDuplex);
       } else {
         final msg = '$method error: unexpected message in $stage: $response';
         sendSelfClose(error: msg);
@@ -248,12 +243,9 @@ abstract class TerminalClient {
 
     stage = ConnectStage.connected;
     if (server.wsToken != '') _send(server.wsToken);
-    if (server.token != '') {
-      stage = ConnectStage.sendAuth;
-      _sendAuth(server.token);
-    } else {
-      _sendPostAuth();
-    }
+
+    stage = ConnectStage.sendAuth;
+    _sendAuth(server.token != '' ? server.token : 'empty');
   }
 
   void _connectingError(String msg) {
@@ -303,7 +295,7 @@ abstract class TerminalClient {
     _clearAsyncRequests();
     _asyncResponseHandlers.clear();
     _requestHandlers.clear();
-    debugPrint('DISPOSE $name');
+    debugPrint('DISPOSE ${server.uri}');
   }
 
   _send(dynamic data) async {
@@ -315,10 +307,10 @@ abstract class TerminalClient {
 
   void _setCriticalError(bool isCritical) {
     hasCriticalError = isCritical;
-    _saved?.putBool('${name}_hasCriticalError', isCritical);
+    _saved?.putBool('_hasCriticalError', isCritical);
   }
 
-  void _restoreCriticalError() => hasCriticalError = _saved?.getBool('${name}_hasCriticalError') ?? false;
+  void _restoreCriticalError() => hasCriticalError = _saved?.getBool('_hasCriticalError') ?? false;
 
   @protected
   callJRPC(String method, {dynamic params, AsyncResponseHandler handler, bool isNotify = false, Duration timeout}) {
@@ -363,9 +355,6 @@ abstract class TerminalClient {
   }
 
   _parse(dynamic msg) async {
-    if (mode == WorkingMode.logger && stage == ConnectStage.work) {
-      return await onLogger(msg);
-    }
     dynamic result;
     try {
       result = jsonDecode(msg);
@@ -477,30 +466,10 @@ abstract class TerminalClient {
     return msg;
   }
 
-  _sendPostAuth() {
-    if (mode == WorkingMode.logger) {
-      stage = ConnectStage.work;
-      callJRPC('remote_log', params: ['json'], isNotify: true);
-      _sendWorkNotify(WorkingStatChange.connected);
-      onOk();
-    } else if (mode == WorkingMode.controller) {
-      stage = ConnectStage.sendDuplex;
-      // FIXME DEPRECATED: params не нужен с mdmTerminal2 0.15.7, потом убрать
-      callJRPC(mDuplex, params: {'notify': false});
-    } else {
-      stage = ConnectStage.happy;
-      _sendWorkNotify(WorkingStatChange.connected);
-    }
-  }
-
   @protected
   pPrint(String msg) {
     if (DEEP_DEBUG) debugPrint('* ${DateTime.now().toUtc().millisecondsSinceEpoch} ${server.uri}~$msg');
   }
-
-  // Будет вызываться пока stage == ConnectStage.logger
-  // Получает сообщения напрямую, без обработки, для логгера
-  onLogger(dynamic msg);
 
   // Подключились.
   onOk();
@@ -509,7 +478,7 @@ abstract class TerminalClient {
   onClose(dynamic error, WorkSignalsType type);
 
   @protected
-  toSysLog(String msg) => log?.addSystem(msg, callers: ['（=ﾟ･ﾟ=）', name]);
+  toSysLog(String msg) => log.addSystem(msg);
 }
 
 String _makeRandomId() {
