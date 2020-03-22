@@ -137,20 +137,7 @@ class LogStyle extends ChangeValueNotifier {
     _upgrade(result);
   }
 
-  void loadAsBaseStyle() {
-    SharedPreferences.getInstance().then((p) {
-      final data = p.getString(_defaultLogStyle);
-      if (data == null) return;
-      LogStyle result;
-      try {
-        result = LogStyle.fromJson(jsonDecode(data));
-      } catch (e) {
-        debugPrint(' * loadAsBaseStyle error: $e');
-        return;
-      }
-      _upgrade(result);
-    });
-  }
+  void loadAsBaseStyle() async => upgradeFromJson((await SharedPreferences.getInstance()).getString(_defaultLogStyle));
 
   saveAsBaseStyle() async {
     await SharedPreferences.getInstance()

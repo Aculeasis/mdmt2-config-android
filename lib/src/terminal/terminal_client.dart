@@ -30,9 +30,8 @@ class WorkingNotification {
 class AsyncRequest {
   final String method;
   final AsyncResponseHandler handler;
-  final int timestamp;
   final Timer timer;
-  AsyncRequest(this.method, this.handler, this.timer) : timestamp = DateTime.now().toUtc().millisecondsSinceEpoch;
+  AsyncRequest(this.method, this.handler, this.timer);
 }
 
 class Error {
@@ -116,55 +115,43 @@ class WorkSignals {
 }
 
 class AsyncResponseHandler {
-  final void Function(String method, Response response) handler;
-  final void Function(String method, Error error) errorHandler;
+  final HandlerFn handler;
+  final ErrorHandlerFn errorHandler;
   AsyncResponseHandler(this.handler, this.errorHandler);
 }
 
 abstract class TerminalClient {
   static const connectLimit = 10;
   static const closeLimit = 10;
+  static const maxAsyncRequestsPool = 100; // макс пул отправленных
+  static const asyncRequestPopTimeout = Duration(seconds: 600); // Всегда выкидываем запрос из пула по таймауту
+
   final _stateStream = StreamController<WorkingNotification>.broadcast();
   final _workSignal = StreamController<WorkSignals>();
-  final ServerData server;
-  final Log log;
-  final SavedStateData _saved;
-  IOWebSocketChannel _channel;
-  StreamSubscription<dynamic> _listener;
-  @protected
-  ConnectStage stage = ConnectStage.wait;
-  bool hasCriticalError;
-  ConnectStage get getStage => stage;
-
-  // макс пул отправленных
-  static const maxAsyncRequestsPool = 100;
   // Для отправленных запросов, обработаем когда получим.
   final _asyncRequests = <String, AsyncRequest>{};
   // Тут будут обработчики
   final _asyncResponseHandlers = <String, AsyncResponseHandler>{};
   final _requestHandlers = <String, void Function(Request request)>{};
-  // Регистрация обработчика, Response и Error всегда корректны.
-  @protected
-  void addResponseHandler(String method,
-          {void Function(String method, Response response) handler,
-          void Function(String method, Error error) errorHandler}) =>
-      _asyncResponseHandlers[method] = AsyncResponseHandler(handler, errorHandler);
-  // Для входящих запросов (уведомления)
-  @protected
-  void addRequestHandler(String method, void Function(Request request) handler) => _requestHandlers[method] = handler;
-  @protected
-  void removeRequestHandler(String method) => _requestHandlers.remove(method);
+
+  final ServerData server;
+  final Log log;
+  final SavedStateData _saved;
+  IOWebSocketChannel _channel;
+  StreamSubscription<dynamic> _listener;
+  ConnectStage _stage = ConnectStage.wait;
+  bool hasCriticalError;
 
   TerminalClient(this.server, this._saved, this.log) {
     _restoreCriticalError();
     _workSignal.stream.listen((event) {
-      if (stage == ConnectStage.connecting) return;
+      if (_stage == ConnectStage.connecting) return;
       if (event.type == WorkSignalsType.close || event.type == WorkSignalsType.selfClose) {
         // уже закрыли или закрываем
         if (isClosing)
           return;
         else {
-          stage = ConnectStage.closing;
+          _stage = ConnectStage.closing;
           _setCriticalError(event.error != null);
           _close(event, event.isDead);
         }
@@ -173,19 +160,19 @@ abstract class TerminalClient {
       if (!isClosing)
         return;
       else {
-        stage = ConnectStage.connecting;
+        _stage = ConnectStage.connecting;
         _runInput();
       }
     });
     void _criticalError(String method, Error error) =>
         sendSelfClose(error: '$method error ${error.code}: ${error.message}');
     void _authHandler(String method, Response response) {
-      if (stage == ConnectStage.sendAuth) {
+      if (_stage == ConnectStage.sendAuth) {
         pPrint('$method SUCCESS: ${response.result}');
-        stage = ConnectStage.sendDuplex;
+        _stage = ConnectStage.sendDuplex;
         callJRPC(mDuplex);
       } else {
-        final msg = '$method error: unexpected message in $stage: $response';
+        final msg = '$method error: unexpected message in $_stage: $response';
         sendSelfClose(error: msg);
       }
     }
@@ -193,20 +180,29 @@ abstract class TerminalClient {
     addResponseHandler(mAuthorization, handler: _authHandler, errorHandler: _criticalError);
     addResponseHandler(mAuthorizationTOTP, handler: _authHandler, errorHandler: _criticalError);
     addResponseHandler(mDuplex, handler: (method, response) {
-      if (stage == ConnectStage.sendDuplex) {
-        stage = ConnectStage.work;
+      if (_stage == ConnectStage.sendDuplex) {
+        _stage = ConnectStage.work;
         pPrint('Controller online: ${response.result}');
         _sendWorkNotify(WorkingStatChange.connected);
         onOk();
       } else {
-        final msg = '$method error: unexpected message in $stage: $response';
+        final msg = '$method error: unexpected message in $_stage: $response';
         sendSelfClose(error: msg);
       }
     }, errorHandler: _criticalError);
   }
 
+  ConnectStage get getStage => _stage;
   Stream<WorkingNotification> get stateStream => _stateStream.stream;
-
+  // Регистрация обработчика, Response и Error всегда корректны.
+  @protected
+  void addResponseHandler(String method, {HandlerFn handler, ErrorHandlerFn errorHandler}) =>
+      _asyncResponseHandlers[method] = AsyncResponseHandler(handler, errorHandler);
+  // Для входящих запросов (уведомления)
+  @protected
+  void addRequestHandler(String method, void Function(Request request) handler) => _requestHandlers[method] = handler;
+  @protected
+  void removeRequestHandler(String method) => _requestHandlers.remove(method);
   // Закрывем сокет. Можно передать ошибку, тогда сокет будет закрыт с ошибкой.
   sendClose({dynamic error, bool isDead = false}) => _workSignal.add(WorkSignals(WorkSignalsType.close, error, isDead));
   @protected
@@ -216,7 +212,6 @@ abstract class TerminalClient {
   sendRun() => _workSignal.add(WorkSignals(WorkSignalsType.run, null, false));
 
   _runInput() async {
-    _clearAsyncRequests();
     _setCriticalError(false);
     _sendWorkNotify(WorkingStatChange.connecting);
     toSysLog('Start connecting to ${server.uri}...');
@@ -241,17 +236,17 @@ abstract class TerminalClient {
     }, cancelOnError: true // cancelOnError
         );
 
-    stage = ConnectStage.connected;
+    _stage = ConnectStage.connected;
     if (server.wsToken != '') _send(server.wsToken);
 
-    stage = ConnectStage.sendAuth;
+    _stage = ConnectStage.sendAuth;
     _sendAuth(server.token != '' ? server.token : 'empty');
   }
 
   void _connectingError(String msg) {
     if (msg != null) toSysLog(msg);
     _setCriticalError(true);
-    stage = ConnectStage.wait;
+    _stage = ConnectStage.wait;
     _sendWorkNotify(WorkingStatChange.broken);
   }
 
@@ -277,13 +272,14 @@ abstract class TerminalClient {
       if (timeoutError != null) msg = '$msg by timeout(${TerminalClient.closeLimit} sec, socket stuck)';
       toSysLog('$msg.');
     }
-    stage = ConnectStage.wait;
+    _clearAsyncRequests();
+    _stage = ConnectStage.wait;
   }
 
-  bool get isClosing => stage == ConnectStage.wait || stage == ConnectStage.closing;
+  bool get isClosing => _stage == ConnectStage.wait || _stage == ConnectStage.closing;
 
   void _clearAsyncRequests() {
-    for (var item in _asyncRequests.values) item.timer?.cancel();
+    for (var item in _asyncRequests.values) item.timer.cancel();
     _asyncRequests.clear();
   }
 
@@ -323,16 +319,15 @@ abstract class TerminalClient {
   }
 
   void _addAsyncRequest(String id, String method, AsyncResponseHandler handler, Duration timeout) {
+    if (!isWork) return;
     if (_asyncRequests.length > maxAsyncRequestsPool) {
-      toSysLog('WARNING! AsyncRequestsPool overloaded! Remove half.');
-      final pool = _asyncRequests.keys.toList()
-        ..sort((a, b) => _asyncRequests[a].timestamp - _asyncRequests[b].timestamp);
-      for (int i = 0; i < (pool.length / 2).ceil(); i++) {
-        _asyncRequests.remove(pool[i]).timer?.cancel();
-      }
+      final removeLength = _asyncRequests.length ~/ 2;
+      toSysLog('WARNING! AsyncRequestsPool overloaded! Remove $removeLength.');
+      final removePool = _asyncRequests.keys.take(removeLength).toList(growable: false);
+      for (var key in removePool) _asyncRequests.remove(key).timer?.cancel();
     }
     final timer = timeout == null
-        ? null
+        ? Timer(asyncRequestPopTimeout, () => _popRequestHandler(id))
         : Timer(
             timeout, // Дурим обработчика подсовывая ему ответ с ошибкой
             () => _parseResponse(Response(
@@ -342,7 +337,7 @@ abstract class TerminalClient {
 
   bool get isWork => _channel != null && _channel.closeCode == null;
   bool get isHandshake =>
-      stage == ConnectStage.sendAuth || stage == ConnectStage.sendDuplex || stage == ConnectStage.connected;
+      _stage == ConnectStage.sendAuth || _stage == ConnectStage.sendDuplex || _stage == ConnectStage.connected;
 
   void _sendWorkNotify(WorkingStatChange signal) => _stateStream.add(WorkingNotification(server, signal));
 
@@ -403,6 +398,11 @@ abstract class TerminalClient {
         return;
       }
     }
+  }
+
+  void _popRequestHandler(String id) {
+    final asyncRequest = _asyncRequests.remove(id)..timer.cancel();
+    toSysLog('WARNING! Request "${asyncRequest.method}" not completed on ${asyncRequestPopTimeout.inSeconds} seconds.');
   }
 
   bool _parseResponse(Response response) {
@@ -487,6 +487,9 @@ String _makeRandomId() {
 }
 
 String _makeHashWithTOTP(String token, double timeTime, {int interval = 2}) {
-  int salt = (timeTime.roundToDouble() / interval).truncate();
+  final salt = (timeTime.roundToDouble() / interval).truncate();
   return '${sha512.convert(utf8.encode(token + salt.toString()))}';
 }
+
+typedef HandlerFn = void Function(String method, Response response);
+typedef ErrorHandlerFn = void Function(String method, Error error);

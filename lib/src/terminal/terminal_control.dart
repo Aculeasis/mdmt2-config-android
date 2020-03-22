@@ -79,7 +79,7 @@ class TerminalControl extends TerminalClient {
         return;
       }
 
-      if (stage != ConnectStage.work) return;
+      if (getStage != ConnectStage.work) return;
       if (e is _InternalCommand)
         _externalCMD(e.method.toLowerCase(), e.params);
       else if (e is _ExternalJRPC)
@@ -147,7 +147,7 @@ class TerminalControl extends TerminalClient {
       });
 
   void _baseSubscriber(bool subscribe, String cmd, Function successCallback) {
-    if (stage != ConnectStage.work) return successCallback();
+    if (getStage != ConnectStage.work) return successCallback();
     callJRPC(subscribe ? 'subscribe' : 'unsubscribe',
         params: [cmd],
         handler: AsyncResponseHandler((method, response) {
@@ -189,7 +189,7 @@ class TerminalControl extends TerminalClient {
     } else if (!allowEmptyCMD.contains(cmd)) {
       return _callToast('Unknown command: "$cmd"');
     }
-    if (stage == ConnectStage.work) callJRPC(cmd, params: params);
+    if (getStage == ConnectStage.work) callJRPC(cmd, params: params);
   }
 
   _addHandlers() {
