@@ -108,16 +108,13 @@ enum WorkSignalsType { close, run, selfClose }
 class WorkSignals {
   final WorkSignalsType type;
   final dynamic error;
-  // У сокета нельзя узнать статус, когда он умирает то подвисает при закрытии
-  // тогда будем закрывать его немного иначе.
-  final isDead;
-  WorkSignals(this.type, this.error, this.isDead);
+  WorkSignals(this.type, this.error);
 }
 
 class AsyncResponseHandler {
-  final HandlerFn handler;
-  final ErrorHandlerFn errorHandler;
-  AsyncResponseHandler(this.handler, this.errorHandler);
+  final OnResponseFn onResponse;
+  final OnErrorFn onError;
+  AsyncResponseHandler(this.onResponse, this.onError);
 }
 
 abstract class TerminalClient {
@@ -131,7 +128,7 @@ abstract class TerminalClient {
   // Для отправленных запросов, обработаем когда получим.
   final _asyncRequests = <String, AsyncRequest>{};
   // Тут будут обработчики
-  final _asyncResponseHandlers = <String, AsyncResponseHandler>{};
+  final _responseHandlers = <String, AsyncResponseHandler>{};
   final _requestHandlers = <String, void Function(Request request)>{};
 
   final ServerData server;
@@ -144,74 +141,65 @@ abstract class TerminalClient {
 
   TerminalClient(this.server, this._saved, this.log) {
     _restoreCriticalError();
+    _responseHandlers.addAll(_makeResponseHandlers());
     _workSignal.stream.listen((event) {
       if (_stage == ConnectStage.connecting) return;
       if (event.type == WorkSignalsType.close || event.type == WorkSignalsType.selfClose) {
-        // уже закрыли или закрываем
-        if (isClosing)
-          return;
-        else {
-          _stage = ConnectStage.closing;
-          _setCriticalError(event.error != null);
-          _close(event, event.isDead);
-        }
-      } else if (event.type == WorkSignalsType.run)
-      // Уже работает или запускается
-      if (!isClosing)
-        return;
-      else {
-        _stage = ConnectStage.connecting;
-        _runInput();
+        if (_stage != ConnectStage.wait && _stage != ConnectStage.closing) _closeInput(event);
+      } else if (event.type == WorkSignalsType.run) {
+        if (_stage == ConnectStage.wait) _runInput();
       }
     });
-    void _criticalError(String method, Error error) =>
-        sendSelfClose(error: '$method error ${error.code}: ${error.message}');
-    void _authHandler(String method, Response response) {
+  }
+
+  Map<String, AsyncResponseHandler> _makeResponseHandlers() {
+    void onCriticalError(String method, Error error) =>
+        _sendSelfClose(error: '$method error ${error.code}: ${error.message}');
+    void badStage(String method, Response response) =>
+        _sendSelfClose(error: '$method error: unexpected message in $_stage: $response');
+
+    void onAuth(String method, Response response) {
       if (_stage == ConnectStage.sendAuth) {
-        pPrint('$method SUCCESS: ${response.result}');
         _stage = ConnectStage.sendDuplex;
-        callJRPC(mDuplex);
+        pPrint('$method SUCCESS: ${response.result}');
+        callJRPC(mDuplex, handler: _responseHandlers[mDuplex]);
       } else {
-        final msg = '$method error: unexpected message in $_stage: $response';
-        sendSelfClose(error: msg);
+        badStage(method, response);
       }
     }
 
-    addResponseHandler(mAuthorization, handler: _authHandler, errorHandler: _criticalError);
-    addResponseHandler(mAuthorizationTOTP, handler: _authHandler, errorHandler: _criticalError);
-    addResponseHandler(mDuplex, handler: (method, response) {
+    void onDuplex(String method, Response response) {
       if (_stage == ConnectStage.sendDuplex) {
         _stage = ConnectStage.work;
         pPrint('Controller online: ${response.result}');
         _sendWorkNotify(WorkingStatChange.connected);
         onOk();
       } else {
-        final msg = '$method error: unexpected message in $_stage: $response';
-        sendSelfClose(error: msg);
+        badStage(method, response);
       }
-    }, errorHandler: _criticalError);
+    }
+
+    return {
+      mDuplex: AsyncResponseHandler(onDuplex, onCriticalError),
+      mAuthorization: AsyncResponseHandler(onAuth, onCriticalError),
+    };
   }
 
   ConnectStage get getStage => _stage;
   Stream<WorkingNotification> get stateStream => _stateStream.stream;
-  // Регистрация обработчика, Response и Error всегда корректны.
-  @protected
-  void addResponseHandler(String method, {HandlerFn handler, ErrorHandlerFn errorHandler}) =>
-      _asyncResponseHandlers[method] = AsyncResponseHandler(handler, errorHandler);
   // Для входящих запросов (уведомления)
   @protected
   void addRequestHandler(String method, void Function(Request request) handler) => _requestHandlers[method] = handler;
   @protected
   void removeRequestHandler(String method) => _requestHandlers.remove(method);
   // Закрывем сокет. Можно передать ошибку, тогда сокет будет закрыт с ошибкой.
-  sendClose({dynamic error, bool isDead = false}) => _workSignal.add(WorkSignals(WorkSignalsType.close, error, isDead));
-  @protected
-  sendSelfClose({dynamic error, bool isDead = false}) =>
-      _workSignal.add(WorkSignals(WorkSignalsType.selfClose, error, isDead));
+  sendClose({dynamic error}) => _workSignal.add(WorkSignals(WorkSignalsType.close, error));
+  _sendSelfClose({dynamic error}) => _workSignal.add(WorkSignals(WorkSignalsType.selfClose, error));
   // Запускаем сокет, если он еще не запущен
-  sendRun() => _workSignal.add(WorkSignals(WorkSignalsType.run, null, false));
+  sendRun() => _workSignal.add(WorkSignals(WorkSignalsType.run, null));
 
   _runInput() async {
+    _stage = ConnectStage.connecting;
     _setCriticalError(false);
     _sendWorkNotify(WorkingStatChange.connecting);
     toSysLog('Start connecting to ${server.uri}...');
@@ -228,10 +216,10 @@ abstract class TerminalClient {
       _parse(message);
       pPrint('recived $message');
     }, onDone: () {
-      sendSelfClose();
+      _sendSelfClose();
       pPrint('ws channel closed');
     }, onError: (error) {
-      sendSelfClose(error: error, isDead: true);
+      _sendSelfClose(error: error);
       pPrint('ws error $error');
     }, cancelOnError: true // cancelOnError
         );
@@ -250,7 +238,10 @@ abstract class TerminalClient {
     _sendWorkNotify(WorkingStatChange.broken);
   }
 
-  _close(WorkSignals event, bool isDead) async {
+  _closeInput(WorkSignals event) async {
+    _stage = ConnectStage.closing;
+    _setCriticalError(event.error != null);
+    _clearAsyncRequests();
     if (_channel != null) {
       final _close = _channel.sink.close;
       _channel = null;
@@ -258,7 +249,7 @@ abstract class TerminalClient {
       _sendWorkNotify(WorkingStatChange.closing);
       dynamic timeoutError;
       try {
-        await _close(status.normalClosure).timeout(Duration(seconds: isDead ? 1 : closeLimit));
+        await _close(status.normalClosure).timeout(Duration(seconds: closeLimit));
       } on TimeoutException catch (e) {
         timeoutError = e;
       }
@@ -272,11 +263,8 @@ abstract class TerminalClient {
       if (timeoutError != null) msg = '$msg by timeout(${TerminalClient.closeLimit} sec, socket stuck)';
       toSysLog('$msg.');
     }
-    _clearAsyncRequests();
     _stage = ConnectStage.wait;
   }
-
-  bool get isClosing => _stage == ConnectStage.wait || _stage == ConnectStage.closing;
 
   void _clearAsyncRequests() {
     for (var item in _asyncRequests.values) item.timer.cancel();
@@ -289,7 +277,6 @@ abstract class TerminalClient {
     _channel?.sink?.close();
     _setCriticalError(false);
     _clearAsyncRequests();
-    _asyncResponseHandlers.clear();
     _requestHandlers.clear();
     debugPrint('DISPOSE ${server.uri}');
   }
@@ -309,9 +296,9 @@ abstract class TerminalClient {
   void _restoreCriticalError() => hasCriticalError = _saved?.getBool('_hasCriticalError') ?? false;
 
   @protected
-  callJRPC(String method, {dynamic params, AsyncResponseHandler handler, bool isNotify = false, Duration timeout}) {
+  callJRPC(String method, {dynamic params, AsyncResponseHandler handler, Duration timeout}) {
     String id;
-    if ((_asyncResponseHandlers.containsKey(method) || handler != null) && !isNotify) {
+    if (handler != null) {
       id = _makeRandomId();
       _addAsyncRequest(id, method, handler, timeout);
     }
@@ -342,11 +329,17 @@ abstract class TerminalClient {
   void _sendWorkNotify(WorkingStatChange signal) => _stateStream.add(WorkingNotification(server, signal));
 
   _sendAuth(String token) {
+    String method;
+    dynamic params;
     if (server.totpSalt) {
       final timeTime = DateTime.now().toUtc().millisecondsSinceEpoch / 1000;
-      callJRPC(mAuthorizationTOTP, params: {'hash': _makeHashWithTOTP(token, timeTime), 'timestamp': timeTime});
-    } else
-      callJRPC(mAuthorization, params: ['${sha512.convert(utf8.encode(token))}']);
+      method = mAuthorizationTOTP;
+      params = {'hash': _makeHashWithTOTP(token, timeTime), 'timestamp': timeTime};
+    } else {
+      method = mAuthorization;
+      params = ['${sha512.convert(utf8.encode(token))}'];
+    }
+    callJRPC(method, params: params, handler: _responseHandlers[mAuthorization]);
   }
 
   _parse(dynamic msg) async {
@@ -357,7 +350,7 @@ abstract class TerminalClient {
       pPrint('Json parsing error $msg :: $e');
       // Ошибка во время рукопожатия недопустима.
       if (isHandshake) {
-        sendSelfClose(error: 'Handshake error: "$e"');
+        _sendSelfClose(error: 'Handshake error: "$e"');
       }
       return;
     }
@@ -408,22 +401,22 @@ abstract class TerminalClient {
   bool _parseResponse(Response response) {
     final asyncRequest = _asyncRequests.remove(response.id);
     asyncRequest?.timer?.cancel();
-    final handler = asyncRequest?.handler ?? _asyncResponseHandlers[asyncRequest?.method];
-    final error = _responseErrorProcessing(response, asyncRequest, handler);
+    final handler = asyncRequest?.handler;
+    final error = _responseErrorProcessing(response, handler);
     if (error != null) {
       pPrint('Recive error id=${response.id}, error: $error');
       if (isHandshake) {
-        sendSelfClose(error: '$error');
+        _sendSelfClose(error: '$error');
         return false;
       }
-      if (handler?.errorHandler != null) handler.errorHandler(asyncRequest?.method, response.error);
+      if (handler?.onError != null) handler.onError(asyncRequest?.method, error);
     } else {
-      if (handler?.handler != null) handler.handler(asyncRequest?.method, response);
+      if (handler?.onResponse != null) handler.onResponse(asyncRequest?.method, response);
     }
     return true;
   }
 
-  static Error _responseErrorProcessing(Response response, AsyncRequest asyncRequest, AsyncResponseHandler handler) {
+  static Error _responseErrorProcessing(Response response, AsyncResponseHandler handler) {
     String msg;
     int code = -999;
     if (response.error != null) {
@@ -437,10 +430,8 @@ abstract class TerminalClient {
       msg = 'Wrong JSON-RPC response: error and result missing!';
     } else if (response.id == null) {
       msg = 'Wrong JSON-RPC response: result is present and id=null';
-    } else if (asyncRequest == null) {
-      msg = 'Unregistered response: "$response"';
     } else if (handler == null) {
-      msg = 'Unsupported response id=${response.id}: "$response"';
+      msg = 'Unregistered response id=${response.id}: "$response"';
     }
     return msg != null ? Error(code, msg) : null;
   }
@@ -491,5 +482,5 @@ String _makeHashWithTOTP(String token, double timeTime, {int interval = 2}) {
   return '${sha512.convert(utf8.encode(token + salt.toString()))}';
 }
 
-typedef HandlerFn = void Function(String method, Response response);
-typedef ErrorHandlerFn = void Function(String method, Error error);
+typedef OnResponseFn = void Function(String method, Response response);
+typedef OnErrorFn = void Function(String method, Error error);

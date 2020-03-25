@@ -30,9 +30,8 @@ class _InternalCommandAlways extends _BaseCMD {
 
 class _ExternalJRPC extends _BaseCMD {
   final AsyncResponseHandler handler;
-  final bool isNotify;
   final Duration timeout;
-  _ExternalJRPC(method, params, this.handler, this.isNotify, this.timeout) : super(method, params);
+  _ExternalJRPC(method, params, this.handler, this.timeout) : super(method, params);
 }
 
 enum _ReconnectStage { no, maybe, really }
@@ -69,9 +68,11 @@ class TerminalControl extends TerminalClient {
   final Reconnect reconnect;
   final changeFnCallback _change;
   _ReconnectStage _reconnectStage = _ReconnectStage.no;
+  final _responseHandlers = <String, AsyncResponseHandler>{};
 
   TerminalControl(ServerData server, SavedStateData saved, log, this.view, this.reconnect, this._change)
       : super(server, saved, log) {
+    _responseHandlers.addAll(_makeResponseHandlers());
     subscribeTo.addAll(view.buttons.keys);
     _externalStreamCMD.stream.listen((e) {
       if (e is _InternalCommandAlways) {
@@ -83,10 +84,64 @@ class TerminalControl extends TerminalClient {
       if (e is _InternalCommand)
         _externalCMD(e.method.toLowerCase(), e.params);
       else if (e is _ExternalJRPC)
-        callJRPC(e.method.toLowerCase(),
-            params: e.params, handler: e.handler, isNotify: e.isNotify, timeout: e.timeout);
+        callJRPC(e.method.toLowerCase(), params: e.params, handler: e.handler, timeout: e.timeout);
     });
-    _addHandlers();
+  }
+
+  Map<String, AsyncResponseHandler> _makeResponseHandlers() {
+    void onError(String method, Error error) => _callToast('"$method" error: $error');
+    void onBackupListError(_, Error error) => _sendBackupList.addError('backup.list error: $error');
+
+    void onPing(_, Response response) {
+      int time = DateTime.now().microsecondsSinceEpoch;
+      String msg;
+      try {
+        time = time - response.result.value['time'];
+      } catch (e) {
+        msg = 'Ping parsing error: $e';
+        pPrint(msg);
+      }
+      msg ??= 'Ping ${(time / 1000).toStringAsFixed(2)} ms';
+      _callToast(msg);
+    }
+
+    void onBackupList(_, Response response) {
+      final files = <BackupLine>[];
+      try {
+        for (Map<String, dynamic> file in response.result.value) {
+          final String filename = file['filename'];
+          final double timestamp = file['timestamp'];
+          if (filename == null || filename == '') throw 'Empty filename in $file';
+          if (timestamp == null) throw 'Empty timestamp in $file';
+          files.add(BackupLine(filename, LogLine.timeToDateTime(timestamp)));
+        }
+      } catch (e) {
+        final msg = 'backup.list parsing error: $e';
+        _sendBackupList.addError(msg);
+        pPrint(msg);
+        return;
+      }
+      files.sort((a, b) => b.time.microsecondsSinceEpoch - a.time.microsecondsSinceEpoch);
+      if (files.isEmpty) {
+        _sendBackupList.addError('No backups');
+      } else {
+        _sendBackupList.add(files);
+      }
+    }
+
+    void onBackupRestore(_, Response response) {
+      _reconnectStage = _ReconnectStage.maybe;
+      final filename = _getFromMap<String>('filename', response) ?? '.. ambiguous result';
+      _callToast('Restoring started from $filename');
+    }
+
+    return {
+      'ping': AsyncResponseHandler(onPing, onError),
+      'rec': AsyncResponseHandler(null, onError),
+      'backup.list': AsyncResponseHandler(onBackupList, onBackupListError),
+      'backup.restore': AsyncResponseHandler(onBackupRestore, onError),
+      'maintenance.reload': AsyncResponseHandler((_, __) => _reconnectStage = _ReconnectStage.maybe, null),
+    };
   }
 
   Stream<String> get streamToads => _seeInToads.stream;
@@ -95,8 +150,8 @@ class TerminalControl extends TerminalClient {
   // Для внешних вызовов
   executeChange(String cmd, {dynamic data}) => _externalStreamCMD.add(_InternalCommandAlways(cmd, data));
   executeMe(String cmd, {dynamic data}) => _externalStreamCMD.add(_InternalCommand(cmd, data));
-  callJRPCExternal(String method, {params, AsyncResponseHandler handler, bool isNotify = false, Duration timeout}) =>
-      _externalStreamCMD.add(_ExternalJRPC(method, params, handler, isNotify, timeout));
+  callJRPCExternal(String method, {params, AsyncResponseHandler handler, Duration timeout}) =>
+      _externalStreamCMD.add(_ExternalJRPC(method, params, handler, timeout));
 
   @override
   void dispose() {
@@ -189,55 +244,7 @@ class TerminalControl extends TerminalClient {
     } else if (!allowEmptyCMD.contains(cmd)) {
       return _callToast('Unknown command: "$cmd"');
     }
-    if (getStage == ConnectStage.work) callJRPC(cmd, params: params);
-  }
-
-  _addHandlers() {
-    void _error(String method, Error error) => _callToast('"$method" error: $error');
-    addResponseHandler('ping', handler: (_, response) {
-      int time = DateTime.now().microsecondsSinceEpoch;
-      try {
-        time = time - response.result.value['time'];
-      } catch (e) {
-        final msg = 'Ping parsing error: $e';
-        pPrint(msg);
-        _callToast(msg);
-        return;
-      }
-      _callToast('Ping ${(time / 1000).toStringAsFixed(2)} ms');
-    }, errorHandler: _error);
-    addResponseHandler('rec', errorHandler: _error);
-    addResponseHandler('backup.list',
-        handler: (_, response) {
-          final files = <BackupLine>[];
-          try {
-            for (Map<String, dynamic> file in response.result.value) {
-              final String filename = file['filename'];
-              final double timestamp = file['timestamp'];
-              if (filename == null || filename == '') throw 'Empty filename in $file';
-              if (timestamp == null) throw 'Empty timestamp in $file';
-              files.add(BackupLine(filename, LogLine.timeToDateTime(timestamp)));
-            }
-          } catch (e) {
-            final msg = 'backup.list parsing error: $e';
-            _sendBackupList.addError(msg);
-            pPrint(msg);
-            return;
-          }
-          files.sort((a, b) => b.time.microsecondsSinceEpoch - a.time.microsecondsSinceEpoch);
-          if (files.isEmpty) {
-            _sendBackupList.addError('No backups');
-          } else {
-            _sendBackupList.add(files);
-          }
-        },
-        errorHandler: (_, error) => _sendBackupList.addError('backup.list error: $error'));
-    addResponseHandler('backup.restore', handler: (_, response) {
-      _reconnectStage = _ReconnectStage.maybe;
-      final filename = _getFromMap<String>('filename', response) ?? '.. ambiguous result';
-      _callToast('Restoring started from $filename');
-    }, errorHandler: _error);
-    addResponseHandler('maintenance.reload', handler: (_, __) => _reconnectStage = _ReconnectStage.maybe);
+    if (getStage == ConnectStage.work) callJRPC(cmd, params: params, handler: _responseHandlers[cmd]);
   }
 
   _handleNotify(Request request) {
