@@ -172,10 +172,11 @@ class TerminalControl extends TerminalClient {
   onOk() {
     _reconnectStage = _ReconnectStage.no;
     view.reset();
-    if (server.log.value) _logSubscriber(true);
-    if (server.qry.value) _cmdSubscriber(true);
+    final batch = getJRPCBatch();
+    if (server.log.value) _logSubscriber(true, call: batch.add);
+    if (server.qry.value) _cmdSubscriber(true, call: batch.add);
 
-    callJRPC('get',
+    batch.add('get',
         params: ['listener', 'volume', 'mvolume', 'mstate'],
         handler: AsyncResponseHandler((_, response) {
           view.listenerOnOff.value = _getFromMap<bool>('listener', response) ?? view.listenerOnOff.value;
@@ -184,26 +185,27 @@ class TerminalControl extends TerminalClient {
           view.musicStatus.value = _mStateSanitize(_getFromMap<String>('mstate', response));
         }, null));
 
-    callJRPC('subscribe',
+    batch.add('subscribe',
         params: subscribeTo,
         handler: AsyncResponseHandler((method, response) {
           if ((_getResponseAs(method, response) ?? false)) {
             for (String cmd in subscribeTo) addRequestHandler('notify.$cmd', _handleNotify);
           }
         }, null));
+    batch.send();
   }
 
-  void _logSubscriber(bool subscribe) => _baseSubscriber(subscribe, 'log', () {
+  void _logSubscriber(bool subscribe, {CallJRPCFn call}) => _baseSubscriber(subscribe, 'log', () {
         if (subscribe != server.log.value) _change(server, log: subscribe);
-      });
+      }, call: call);
 
-  void _cmdSubscriber(bool subscribe) => _baseSubscriber(subscribe, 'cmd', () {
+  void _cmdSubscriber(bool subscribe, {CallJRPCFn call}) => _baseSubscriber(subscribe, 'cmd', () {
         if (subscribe != server.qry.value) _change(server, qry: subscribe);
-      });
+      }, call: call);
 
-  void _baseSubscriber(bool subscribe, String cmd, Function successCallback) {
+  void _baseSubscriber(bool subscribe, String cmd, Function successCallback, {CallJRPCFn call}) {
     if (getStage != ConnectStage.work) return successCallback();
-    callJRPC(subscribe ? 'subscribe' : 'unsubscribe',
+    (call ?? callJRPC)(subscribe ? 'subscribe' : 'unsubscribe',
         params: [cmd],
         handler: AsyncResponseHandler((method, response) {
           if ((_getResponseAs(method, response) ?? false)) {

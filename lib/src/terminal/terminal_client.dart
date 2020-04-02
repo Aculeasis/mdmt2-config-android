@@ -117,6 +117,35 @@ class AsyncResponseHandler {
   AsyncResponseHandler(this.onResponse, this.onError);
 }
 
+class _BatchEntry {
+  final String method;
+  final dynamic params;
+  final AsyncResponseHandler handler;
+  final Duration timeout;
+  final String id;
+  _BatchEntry(this.method, this.params, this.handler, this.timeout, this.id);
+}
+
+class CallJRPCBatch {
+  final _data = <_BatchEntry>[];
+  final AddAsyncRequestFn _addAsyncRequest;
+  final SendFn _send;
+
+  CallJRPCBatch(this._addAsyncRequest, this._send);
+
+  void add(String method, {dynamic params, AsyncResponseHandler handler, Duration timeout}) {
+    _data.add(_BatchEntry(method, params, handler, timeout, handler != null ? _makeRandomId() : null));
+  }
+
+  void send() {
+    final request = [for (var obj in _data) Request(obj.method, params: obj.params, id: obj.id).toJson()];
+    if (request.isNotEmpty && _send(jsonEncode(request))) {
+      for (var obj in _data) if (obj.id != null) _addAsyncRequest(obj.id, obj.method, obj.handler, obj.timeout);
+    }
+    _data.clear();
+  }
+}
+
 abstract class TerminalClient {
   static const connectLimit = 10;
   static const closeLimit = 10;
@@ -281,11 +310,13 @@ abstract class TerminalClient {
     debugPrint('DISPOSE ${server.uri}');
   }
 
-  _send(dynamic data) async {
+  bool _send(dynamic data) {
     if (isWork) {
       pPrint('send $data');
       _channel.sink.add(data);
+      return true;
     }
+    return false;
   }
 
   void _setCriticalError(bool isCritical) {
@@ -297,16 +328,16 @@ abstract class TerminalClient {
 
   @protected
   callJRPC(String method, {dynamic params, AsyncResponseHandler handler, Duration timeout}) {
-    String id;
-    if (handler != null) {
-      id = _makeRandomId();
+    String id = handler != null ? _makeRandomId() : null;
+    if (_send(jsonEncode(Request(method, params: params, id: id))) && id != null) {
       _addAsyncRequest(id, method, handler, timeout);
     }
-    _send(jsonEncode(Request(method, params: params, id: id)));
   }
 
+  @protected
+  CallJRPCBatch getJRPCBatch() => CallJRPCBatch(_addAsyncRequest, _send);
+
   void _addAsyncRequest(String id, String method, AsyncResponseHandler handler, Duration timeout) {
-    if (!isWork) return;
     if (_asyncRequests.length > maxAsyncRequestsPool) {
       final removeLength = _asyncRequests.length ~/ 2;
       toSysLog('WARNING! AsyncRequestsPool overloaded! Remove $removeLength.');
@@ -484,3 +515,6 @@ String _makeHashWithTOTP(String token, double timeTime, {int interval = 2}) {
 
 typedef OnResponseFn = void Function(String method, Response response);
 typedef OnErrorFn = void Function(String method, Error error);
+typedef CallJRPCFn = void Function(String method, {dynamic params, AsyncResponseHandler handler, Duration timeout});
+typedef AddAsyncRequestFn = void Function(String id, String method, AsyncResponseHandler handler, Duration timeout);
+typedef SendFn = bool Function(dynamic data);
